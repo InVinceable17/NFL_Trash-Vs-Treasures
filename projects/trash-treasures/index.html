@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Trash &amp; Treasures</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #181b22;
+    --panel-2: #20242e;
+    --line: #2c3140;
+    --text: #e8eaed;
+    --muted: #9aa3b2;
+    --treasure: #f5c542;
+    --trash: #4fb0ff;
+    --accent: #7c5cff;
+    --pink: #ff7eb6;     /* swapped after Weeks 1-6 */
+    --teal: #38d9d9;     /* swapped after Weeks 7-12 */
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  #root { max-width: 1180px; margin: 0 auto; padding: 22px 14px 80px; }
+  h1 { font-size: 24px; margin: 0; letter-spacing: -0.5px; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .tabs { display: flex; gap: 4px; margin: 18px 0; background: var(--panel); padding: 5px; border-radius: 12px; max-width: 400px; }
+  .tab { flex: 1; padding: 9px 12px; text-align: center; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); border: none; background: transparent; }
+  .tab.active { background: var(--panel-2); color: var(--text); }
+  button.btn { background: var(--accent); color: white; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
+  button.btn.ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
+  .row { display: flex; align-items: center; gap: 12px; }
+  .between { justify-content: space-between; }
+
+  /* Dashboard grid */
+  .dash { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  @media (max-width: 900px) { .dash { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 500px) { .dash { grid-template-columns: 1fr; } }
+  .col { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+  .col-head { background: var(--panel-2); padding: 10px 12px; font-weight: 800; font-size: 15px; text-align: center; border-bottom: 1px solid var(--line); }
+  .sec-head { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; padding: 7px 10px 4px; color: var(--muted); }
+  .sec-head.treasure { color: var(--treasure); }
+  .sec-head.trash { color: var(--trash); }
+  .tt { width: 100%; border-collapse: collapse; }
+  .tt th { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; font-weight: 700; padding: 2px 6px; text-align: right; }
+  .tt th.tm { text-align: left; }
+  .tt td { font-size: 11.5px; padding: 4px 6px; border-top: 1px solid var(--line); text-align: right; font-variant-numeric: tabular-nums; }
+  .tt td.tm { text-align: left; font-weight: 600; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-left: 3px solid var(--tc, transparent); padding-left: 8px; }
+  .tt td.pts { font-weight: 800; }
+  tr.swap-wk6 td { background: rgba(255,126,182,.13); }
+  tr.swap-wk6 td.tm { border-left-color: var(--pink); }
+  tr.swap-wk12 td { background: rgba(56,217,217,.13); }
+  tr.swap-wk12 td.tm { border-left-color: var(--teal); }
+  tr.locked td { color: var(--muted); font-style: italic; }
+  tr.locked td.tm { border-left-color: transparent; }
+  .lockrow td { font-size: 8.5px; text-transform: uppercase; letter-spacing: .5px; color: #6b7280; padding: 5px 6px 1px; text-align: left; border-top: 1px solid var(--line); }
+  .col-foot { margin-top: auto; padding: 9px 12px; border-top: 2px solid var(--line); display: flex; align-items: center; justify-content: space-between; background: var(--panel-2); }
+  .rankbadge { font-weight: 800; font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--line); }
+  .rankbadge.r1 { background: var(--treasure); color: #1a1a1a; }
+  .foot-total { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+  /* Bottom row: standings + legend */
+  .bottom { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-top: 16px; align-items: start; }
+  @media (max-width: 700px) { .bottom { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .panel h2 { font-size: 15px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .5px; }
+  table.standings { width: 100%; border-collapse: collapse; }
+  table.standings th, table.standings td { padding: 8px 8px; border-bottom: 1px solid var(--line); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+  table.standings th { color: var(--muted); font-size: 11px; text-transform: uppercase; }
+  table.standings th.l, table.standings td.l { text-align: left; }
+  .legend-item { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 13px; }
+  .swatch { width: 26px; height: 16px; border-radius: 4px; border: 1px solid var(--line); }
+  .swatch.pink { background: rgba(255,126,182,.4); border-color: var(--pink); }
+  .swatch.teal { background: rgba(56,217,217,.4); border-color: var(--teal); }
+
+  /* Draft tab */
+  .draft-order-list { display: flex; flex-direction: column; gap: 8px; max-width: 420px; margin: 14px 0 18px; }
+  .draft-order-item { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .draft-order-item .num { font-weight: 800; color: var(--muted); width: 18px; text-align: center; }
+  .draft-order-item .nm { flex: 1; font-weight: 700; }
+  .iconbtn { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 6px; width: 30px; height: 30px; cursor: pointer; font-size: 14px; line-height: 1; }
+  .iconbtn:disabled { opacity: .3; cursor: default; }
+  .pickbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; margin-bottom: 12px; }
+  .pickbar .who { font-size: 16px; font-weight: 800; }
+  .pickbar .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .clock { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+  @media (max-width: 700px) { .clock { grid-template-columns: repeat(2, 1fr); } }
+  .clockcard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; text-align: center; }
+  .clockcard.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .clockcard .cname { font-weight: 800; font-size: 14px; }
+  .clockcard .ccounts { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  .clockcard .ccounts b { color: var(--text); }
+  .teamgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+  .teamcard { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--tc, #666); border-radius: 9px; padding: 7px 8px 7px 10px; }
+  .teamcard .tnm { flex: 1; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pickbtn { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 4px 9px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .pickbtn:disabled { opacity: .3; cursor: default; }
+  .pickbtn.t:not(:disabled):hover { border-color: var(--treasure); }
+  .pickbtn.tr:not(:disabled):hover { border-color: var(--trash); }
+
+  /* Edit tab */
+  .editgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  @media (max-width: 700px) { .editgrid { grid-template-columns: 1fr; } }
+  input[type=number] { width: 46px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; text-align: center; font-size: 12px; }
+  .erow { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; padding: 3px 0; font-size: 12px; }
+  .erow .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ehdr { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 10px 0 4px; font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/jsx-source" id="app-source">
+const { useState, useEffect, useMemo } = React;
+
+const PLAYERS = ["Natalie", "Kevin", "Vince", "Haley"];
+const STORAGE_KEY = "trash-treasures-v2";
+
+const COLORS = {
+  "Philadelphia Eagles":"#004C54","Houston Texans":"#03202F","Pittsburgh Steelers":"#FFB612","Seattle Seahawks":"#69BE28",
+  "Buffalo Bills":"#00338D","Green Bay Packers":"#203731","Los Angeles Chargers":"#0080C6","Cincinnati Bengals":"#FB4F14",
+  "Detroit Lions":"#0076B6","New England Patriots":"#002244","Denver Broncos":"#FB4F14","Indianapolis Colts":"#002C5F",
+  "Baltimore Ravens":"#9E7C0C","San Francisco 49ers":"#AA0000","Jacksonville Jaguars":"#006778","Los Angeles Rams":"#003594",
+  "Tennessee Titans":"#4B92DB","Carolina Panthers":"#0085CA","Las Vegas Raiders":"#A5ACAF","Washington Commanders":"#5A1414",
+  "New Orleans Saints":"#D3BC8D","Miami Dolphins":"#008E97","New York Jets":"#125740","Atlanta Falcons":"#A71930",
+  "New York Giants":"#0B2265","Dallas Cowboys":"#869397","Tampa Bay Buccaneers":"#D50A0A","Arizona Cardinals":"#97233F",
+  "Cleveland Browns":"#FF3C00","Minnesota Vikings":"#4F2683","Chicago Bears":"#0B162A","Kansas City Chiefs":"#E31837"
+};
+
+// Seed: current records [W, L] for each player's 8 active teams.
+// (Swapped-in teams show partial records, mirroring the sheet.)
+const REC0 = {
+  "Philadelphia Eagles":[11,6],"Houston Texans":[6,8],"Pittsburgh Steelers":[10,7],"Seattle Seahawks":[10,7],
+  "Buffalo Bills":[12,5],"Green Bay Packers":[9,7],"Los Angeles Chargers":[11,6],"Cincinnati Bengals":[3,3],
+  "Detroit Lions":[9,3],"New England Patriots":[4,1],"Denver Broncos":[14,3],"Indianapolis Colts":[3,3],
+  "Baltimore Ravens":[8,9],"San Francisco 49ers":[8,9],"Jacksonville Jaguars":[6,8],"Los Angeles Rams":[12,5],
+  "Tennessee Titans":[3,14],"Carolina Panthers":[8,9],"Las Vegas Raiders":[3,14],"Washington Commanders":[2,4],
+  "New Orleans Saints":[6,11],"Miami Dolphins":[7,10],"New York Jets":[3,14],"Atlanta Falcons":[4,2],
+  "New York Giants":[4,13],"Dallas Cowboys":[7,10],"Tampa Bay Buccaneers":[6,3],"Arizona Cardinals":[1,10],
+  "Cleveland Browns":[5,12],"Minnesota Vikings":[5,3],"Chicago Bears":[11,6],"Kansas City Chiefs":[3,8]
+};
+
+// Roster. active rows: [team, swapTag(null|"wk6"|"wk12")]. locked rows: [team, W, L, window].
+const ROSTER0 = {
+  Natalie: {
+    treasures: { active: [["Philadelphia Eagles","wk12"],["Houston Texans",null],["Pittsburgh Steelers",null],["Seattle Seahawks","wk12"]],
+                 locked: [["Houston Texans",2,1,"Weeks 1-6"],["Washington Commanders",3,8,"Weeks 7-12"]] },
+    trash:     { active: [["Tennessee Titans",null],["Carolina Panthers",null],["Las Vegas Raiders",null],["Washington Commanders","wk6"]],
+                 locked: [["Seattle Seahawks",4,2,"Weeks 1-6"],["Houston Texans",4,2,"Weeks 7-12"]] },
+  },
+  Kevin: {
+    treasures: { active: [["Buffalo Bills",null],["Green Bay Packers",null],["Los Angeles Chargers",null],["Cincinnati Bengals","wk6"]],
+                 locked: [["Cincinnati Bengals",2,4,"Weeks 1-6"],["Atlanta Falcons",1,5,"Weeks 7-12"]] },
+    trash:     { active: [["New Orleans Saints",null],["Miami Dolphins",null],["New York Jets",null],["Atlanta Falcons","wk6"]],
+                 locked: [["Atlanta Falcons",3,2,"Weeks 1-6"],["Cincinnati Bengals",1,4,"Weeks 7-12"]] },
+  },
+  Vince: {
+    treasures: { active: [["Detroit Lions","wk12"],["New England Patriots",null],["Denver Broncos",null],["Indianapolis Colts",null]],
+                 locked: [["Arizona Cardinals",2,4,"Weeks 1-6"],["Tampa Bay Buccaneers",6,6,"Weeks 7-12"]] },
+    trash:     { active: [["New York Giants",null],["Dallas Cowboys",null],["Tampa Bay Buccaneers","wk12"],["Arizona Cardinals","wk6"]],
+                 locked: [["Indianapolis Colts",5,1,"Weeks 1-6"],["New England Patriots",10,2,"Weeks 7-12"]] },
+  },
+  Haley: {
+    treasures: { active: [["Baltimore Ravens","wk12"],["San Francisco 49ers","wk6"],["Jacksonville Jaguars",null],["Los Angeles Rams",null]],
+                 locked: [["Kansas City Chiefs",3,3,"Weeks 1-6"],["Minnesota Vikings",4,2,"Weeks 7-12"]] },
+    trash:     { active: [["Cleveland Browns",null],["Minnesota Vikings",null],["Chicago Bears","wk6"],["Kansas City Chiefs",null]],
+                 locked: [["San Francisco 49ers",2,2,"Weeks 1-6"],["Jacksonville Jaguars",2,2,"Weeks 7-12"]] },
+  },
+};
+
+function freshState() { return { records: JSON.parse(JSON.stringify(REC0)), roster: JSON.parse(JSON.stringify(ROSTER0)) }; }
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) { const p = JSON.parse(raw); if (p.records && p.roster) return p; }
+  } catch (e) {}
+  return freshState();
+}
+
+// ---- Scoring ----
+const activePts = (team, label, records) => { const r = records[team] || [0,0]; return label === "treasure" ? r[0] : r[1]; };
+const lockedPts = (label, w, l) => (label === "treasure" ? w : l);
+function sectionScore(section, label, records) {
+  let s = 0;
+  section.active.forEach(([t]) => s += activePts(t, label, records));
+  section.locked.forEach(([t, w, l]) => s += lockedPts(label, w, l));
+  return s;
+}
+const winnersScore = (player, st) => sectionScore(st.roster[player].treasures, "treasure", st.records);
+const losersScore  = (player, st) => sectionScore(st.roster[player].trash, "trash", st.records);
+const totalScore   = (player, st) => winnersScore(player, st) + losersScore(player, st);
+
+// ---- Snake draft ----
+const DRAFT_KEY = "trash-treasures-draft";
+const ROUNDS = 8;             // 4 treasures + 4 trash per player
+const PER_CAT = 4;           // max picks per category per player
+const ALL_TEAMS = Object.keys(COLORS).sort();
+
+// Whose pick is it for a given 0-based overall pick index, snaking each round.
+function snakePlayer(order, pickIndex) {
+  const round = Math.floor(pickIndex / order.length);
+  const slot = pickIndex % order.length;
+  const ro = round % 2 === 0 ? order : order.slice().reverse();
+  return ro[slot];
+}
+
+// Turn a completed list of picks into a fresh-season state (no swaps/locked rows yet).
+function buildStateFromPicks(picks) {
+  const records = {};
+  const roster = {};
+  PLAYERS.forEach(p => roster[p] = { treasures: { active: [], locked: [] }, trash: { active: [], locked: [] } });
+  picks.forEach(({ player, team, type }) => {
+    records[team] = [0, 0];
+    roster[player][type === "treasure" ? "treasures" : "trash"].active.push([team, null]);
+  });
+  return { records, roster };
+}
+
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (raw) { const p = JSON.parse(raw); if (p && Array.isArray(p.order) && Array.isArray(p.picks)) return p; }
+  } catch (e) {}
+  return null;
+}
+
+// ---- App ----
+function App() {
+  const [st, setSt] = useState(load);
+  const [tab, setTab] = useState("dashboard");
+  useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(st)); }, [st]);
+
+  const ranking = useMemo(() => {
+    const totals = {}; PLAYERS.forEach(p => totals[p] = totalScore(p, st));
+    const order = [...PLAYERS].sort((a, b) => totals[b] - totals[a]);
+    const rank = {}; order.forEach((p, i) => rank[p] = i + 1);
+    return { totals, rank, order };
+  }, [st]);
+
+  function reset() { if (confirm("Reset the whole board back to the seeded data?")) setSt(freshState()); }
+  function commitSeason(newState) { setSt(newState); setTab("dashboard"); }
+
+  return (
+    <div>
+      <div className="row between">
+        <div>
+          <h1>🗑️ Trash &amp; 💎 Treasures</h1>
+          <div className="sub">Treasures score their wins · Trash score their losses · swapped picks bank locked points</div>
+        </div>
+        <button className="btn ghost" onClick={reset}>Reset</button>
+      </div>
+
+      <div className="tabs">
+        <button className={"tab" + (tab === "dashboard" ? " active" : "")} onClick={() => setTab("dashboard")}>Dashboard</button>
+        <button className={"tab" + (tab === "edit" ? " active" : "")} onClick={() => setTab("edit")}>Edit</button>
+        <button className={"tab" + (tab === "draft" ? " active" : "")} onClick={() => setTab("draft")}>Draft</button>
+      </div>
+
+      {tab === "dashboard" ? <Dashboard st={st} ranking={ranking} />
+        : tab === "edit" ? <Edit st={st} setSt={setSt} />
+        : <Draft commitSeason={commitSeason} />}
+    </div>
+  );
+}
+
+function ordinal(n) { return n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : n + "th"; }
+
+function Section({ section, label, records }) {
+  return (
+    <React.Fragment>
+      <div className={"sec-head " + label}>{label === "treasure" ? "💎 Treasures" : "🗑️ Trash"}</div>
+      <table className="tt">
+        <thead><tr><th className="tm">Team</th><th>W</th><th>L</th><th>Pts</th></tr></thead>
+        <tbody>
+          {section.active.map(([team, swap], i) => {
+            const r = records[team] || [0,0];
+            return (
+              <tr key={"a"+i} className={swap === "wk6" ? "swap-wk6" : swap === "wk12" ? "swap-wk12" : ""}>
+                <td className="tm" style={{ ["--tc"]: COLORS[team] || "#666" }} title={team}>{team}</td>
+                <td>{r[0]}</td><td>{r[1]}</td>
+                <td className="pts">{activePts(team, label, records)}</td>
+              </tr>
+            );
+          })}
+          {section.locked.map(([team, w, l, win], i) => (
+            <React.Fragment key={"l"+i}>
+              <tr className="lockrow"><td colSpan="4">🔒 {win} performance (locked)</td></tr>
+              <tr className="locked">
+                <td className="tm" title={team}>{team}</td>
+                <td>{w}</td><td>{l}</td>
+                <td className="pts">{lockedPts(label, w, l)}</td>
+              </tr>
+            </React.Fragment>
+          ))}
+        </tbody>
+      </table>
+    </React.Fragment>
+  );
+}
+
+function Dashboard({ st, ranking }) {
+  return (
+    <div>
+      <div className="dash">
+        {PLAYERS.map(p => {
+          const data = st.roster[p];
+          const rank = ranking.rank[p];
+          return (
+            <div className="col" key={p}>
+              <div className="col-head">{p}</div>
+              <Section section={data.treasures} label="treasure" records={st.records} />
+              <Section section={data.trash} label="trash" records={st.records} />
+              <div className="col-foot">
+                <span className={"rankbadge" + (rank === 1 ? " r1" : "")}>{ordinal(rank)}</span>
+                <span className="foot-total">{ranking.totals[p]}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="bottom">
+        <div className="panel">
+          <h2>Standings</h2>
+          <table className="standings">
+            <thead><tr><th className="l">Pos</th><th className="l">Player</th><th>W's from Winners</th><th>L's from Losers</th><th>Total</th></tr></thead>
+            <tbody>
+              {ranking.order.map(p => (
+                <tr key={p}>
+                  <td className="l"><span className={"rankbadge" + (ranking.rank[p] === 1 ? " r1" : "")}>{ordinal(ranking.rank[p])}</span></td>
+                  <td className="l" style={{ fontWeight: 700 }}>{p}</td>
+                  <td style={{ color: "var(--treasure)" }}>{winnersScore(p, st)}</td>
+                  <td style={{ color: "var(--trash)" }}>{losersScore(p, st)}</td>
+                  <td style={{ fontWeight: 800 }}>{ranking.totals[p]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="panel">
+          <h2>Legend</h2>
+          <div className="legend-item"><span className="swatch pink"></span> Team swapped in after Weeks 1-6</div>
+          <div className="legend-item"><span className="swatch teal"></span> Team swapped in after Weeks 7-12</div>
+          <div className="sub" style={{ marginTop: 8 }}>Greyed “locked” rows are the original picks’ banked performance from that window — they still count toward the total.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- Edit ----
+function Edit({ st, setSt }) {
+  function setRec(team, idx, val) {
+    const n = Math.max(0, Math.min(20, parseInt(val, 10) || 0));
+    setSt(s => ({ ...s, records: { ...s.records, [team]: idx === 0 ? [n, (s.records[team]||[0,0])[1]] : [(s.records[team]||[0,0])[0], n] } }));
+  }
+  function setLocked(player, sec, rowIdx, field, val) {
+    const n = Math.max(0, Math.min(20, parseInt(val, 10) || 0));
+    setSt(s => {
+      const roster = JSON.parse(JSON.stringify(s.roster));
+      roster[player][sec].locked[rowIdx][field] = n; // field 1 = W, 2 = L
+      return { ...s, roster };
+    });
+  }
+  return (
+    <div>
+      <div className="sub" style={{ marginBottom: 14 }}>Update active team records each week (W / L). Treasures score wins, Trash score losses. Locked rows are the banked swap history — edit only if you need to correct it.</div>
+      <div className="editgrid">
+        {PLAYERS.map(p => (
+          <div className="panel" key={p}>
+            <h2 style={{ marginBottom: 4 }}>{p}</h2>
+            {["treasures", "trash"].map(sec => {
+              const label = sec === "treasures" ? "treasure" : "trash";
+              return (
+                <div key={sec}>
+                  <div className={"sec-head " + label} style={{ padding: "8px 0 2px" }}>{sec === "treasures" ? "💎 Treasures" : "🗑️ Trash"}</div>
+                  {st.roster[p][sec].active.map(([team], i) => {
+                    const r = st.records[team] || [0,0];
+                    return (
+                      <div className="erow" key={i}>
+                        <span className="lbl" title={team}>{team}</span>
+                        <input type="number" value={r[0]} onChange={e => setRec(team, 0, e.target.value)} title="Wins" />
+                        <input type="number" value={r[1]} onChange={e => setRec(team, 1, e.target.value)} title="Losses" />
+                      </div>
+                    );
+                  })}
+                  <div className="ehdr">Locked (banked)</div>
+                  {st.roster[p][sec].locked.map(([team, w, l, win], i) => (
+                    <div className="erow" key={"L"+i}>
+                      <span className="lbl" title={team}>{team} · {win}</span>
+                      <input type="number" value={w} onChange={e => setLocked(p, sec, i, 1, e.target.value)} title="Wins" />
+                      <input type="number" value={l} onChange={e => setLocked(p, sec, i, 2, e.target.value)} title="Losses" />
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---- Draft ----
+function Draft({ commitSeason }) {
+  const [draft, setDraft] = useState(() => loadDraft() || { phase: "order", order: [...PLAYERS], picks: [] });
+  useEffect(() => { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); }, [draft]);
+
+  const totalPicks = ROUNDS * PLAYERS.length; // 32
+  const taken = useMemo(() => new Set(draft.picks.map(p => p.team)), [draft.picks]);
+  const counts = useMemo(() => {
+    const c = {}; PLAYERS.forEach(p => c[p] = { treasure: 0, trash: 0 });
+    draft.picks.forEach(({ player, type }) => c[player][type]++);
+    return c;
+  }, [draft.picks]);
+
+  const pickIndex = draft.picks.length;
+  const current = pickIndex < totalPicks ? snakePlayer(draft.order, pickIndex) : null;
+  const round = Math.floor(pickIndex / PLAYERS.length) + 1;
+
+  // order phase
+  function move(i, dir) {
+    setDraft(d => { const o = [...d.order]; const j = i + dir; if (j < 0 || j >= o.length) return d; [o[i], o[j]] = [o[j], o[i]]; return { ...d, order: o }; });
+  }
+  function randomize() {
+    setDraft(d => { const o = [...d.order]; for (let i = o.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; } return { ...d, order: o }; });
+  }
+  function startDraft() { setDraft(d => ({ ...d, phase: "draft" })); }
+
+  // draft phase
+  function pick(team, type) {
+    setDraft(d => {
+      const idx = d.picks.length;
+      if (idx >= totalPicks) return d;
+      const cur = snakePlayer(d.order, idx);
+      const used = d.picks.filter(p => p.player === cur && p.type === type).length;
+      if (used >= PER_CAT) return d;
+      const picks = [...d.picks, { player: cur, team, type, round: Math.floor(idx / PLAYERS.length) + 1 }];
+      return { ...d, picks, phase: picks.length >= totalPicks ? "review" : "draft" };
+    });
+  }
+  function undo() { setDraft(d => d.picks.length ? { ...d, picks: d.picks.slice(0, -1), phase: "draft" } : d); }
+  function restart() { if (confirm("Clear this draft and start over?")) setDraft({ phase: "order", order: [...PLAYERS], picks: [] }); }
+  function finish() {
+    if (!confirm("Start the season with this draft? This replaces the current board.")) return;
+    localStorage.removeItem(DRAFT_KEY);
+    commitSeason(buildStateFromPicks(draft.picks));
+  }
+
+  if (draft.phase === "order") {
+    return (
+      <div>
+        <div className="sub" style={{ marginBottom: 8 }}>Set the draft order, then snake-draft 4 💎 Treasures and 4 🗑️ Trash for each player — 8 rounds, every NFL team goes exactly once.</div>
+        <button className="btn ghost" onClick={randomize}>🎲 Randomize order</button>
+        <div className="draft-order-list">
+          {draft.order.map((p, i) => (
+            <div className="draft-order-item" key={p}>
+              <span className="num">{i + 1}</span>
+              <span className="nm">{p}</span>
+              <button className="iconbtn" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
+              <button className="iconbtn" disabled={i === draft.order.length - 1} onClick={() => move(i, 1)}>↓</button>
+            </div>
+          ))}
+        </div>
+        <button className="btn" onClick={startDraft}>Start draft →</button>
+      </div>
+    );
+  }
+
+  if (draft.phase === "review") {
+    return (
+      <div>
+        <div className="pickbar">
+          <div>
+            <div className="who">✅ Draft complete</div>
+            <div className="meta">Review the rosters, then start the season.</div>
+          </div>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn ghost" onClick={undo}>↩ Undo last</button>
+            <button className="btn ghost" onClick={restart}>Restart</button>
+            <button className="btn" onClick={finish}>Start season →</button>
+          </div>
+        </div>
+        <div className="dash">
+          {PLAYERS.map(p => (
+            <div className="col" key={p}>
+              <div className="col-head">{p}</div>
+              {[["treasure", "💎 Treasures"], ["trash", "🗑️ Trash"]].map(([type, title]) => (
+                <React.Fragment key={type}>
+                  <div className={"sec-head " + type}>{title}</div>
+                  <table className="tt"><tbody>
+                    {draft.picks.filter(x => x.player === p && x.type === type).map((x, i) => (
+                      <tr key={i}><td className="tm" style={{ ["--tc"]: COLORS[x.team] || "#666" }} title={x.team}>{x.team}</td></tr>
+                    ))}
+                  </tbody></table>
+                </React.Fragment>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // draft phase
+  return (
+    <div>
+      <div className="pickbar">
+        <div>
+          <div className="who">🟢 {current} on the clock</div>
+          <div className="meta">Round {round} of {ROUNDS} · Pick {pickIndex + 1} of {totalPicks} · pick 💎 Treasure or 🗑️ Trash</div>
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn ghost" onClick={undo} disabled={!draft.picks.length}>↩ Undo</button>
+          <button className="btn ghost" onClick={restart}>Restart</button>
+        </div>
+      </div>
+      <div className="clock">
+        {draft.order.map(p => (
+          <div className={"clockcard" + (p === current ? " on" : "")} key={p}>
+            <div className="cname">{p}</div>
+            <div className="ccounts">💎 <b>{counts[p].treasure}</b>/4 · 🗑️ <b>{counts[p].trash}</b>/4</div>
+          </div>
+        ))}
+      </div>
+      <div className="teamgrid">
+        {ALL_TEAMS.filter(t => !taken.has(t)).map(t => (
+          <div className="teamcard" key={t} style={{ ["--tc"]: COLORS[t] || "#666" }}>
+            <span className="tnm" title={t}>{t}</span>
+            <button className="pickbtn t" disabled={counts[current].treasure >= PER_CAT} onClick={() => pick(t, "treasure")} title="Draft as Treasure">💎</button>
+            <button className="pickbtn tr" disabled={counts[current].trash >= PER_CAT} onClick={() => pick(t, "trash")} title="Draft as Trash">🗑️</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+
+<script>
+  // Compile the JSX explicitly with the classic runtime (React.createElement) so it runs
+  // as a plain inline script with no build step. Surfaces any error visibly on the page.
+  (function () {
+    try {
+      var src = document.getElementById("app-source").textContent;
+      var out = Babel.transform(src, { presets: [["react", { runtime: "classic" }]] });
+      (0, eval)(out.code);
+    } catch (err) {
+      document.getElementById("root").innerHTML =
+        '<pre style="color:#ff6b6b;white-space:pre-wrap;font-size:13px;padding:16px">App failed to load:\n\n' +
+        (err && err.message ? err.message : err) + '</pre>';
+      console.error(err);
+    }
+  })();
+</script>
+</body>
+</html>
