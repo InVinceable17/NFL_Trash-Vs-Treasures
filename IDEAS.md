@@ -8,6 +8,6 @@
 
 ## In Progress
 
-- **Trash & Treasures** — 4-player fantasy league tracker (snake draft of NFL teams labeled treasure/trash, live standings, mid-season swaps). `projects/trash-treasures/` · single-file HTML + localStorage
-
 ## Done
+
+- **Trash & Treasures** — 4-player fantasy league tracker. Repo: [NFL_Trash-Vs-Treasures](../NFL_Trash-Vs-Treasures). Single-file HTML + React + localStorage. Live standings, per-player team roster with locked swap history, editable W/L weekly.
