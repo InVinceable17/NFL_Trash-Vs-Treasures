@@ -100,6 +100,9 @@
   .pickbtn:disabled { opacity: .3; cursor: default; }
   .pickbtn.t:not(:disabled):hover { border-color: var(--treasure); }
   .pickbtn.tr:not(:disabled):hover { border-color: var(--trash); }
+  .col.col-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  tr.empty-slot td { color: var(--line); border-left-color: transparent !important; }
+  .draft-preview { margin-bottom: 16px; }
   .div-section { margin-bottom: 16px; }
   .conf-group { margin-bottom: 20px; }
   .conf-header { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
@@ -437,6 +440,40 @@ function Edit({ st, setSt }) {
   );
 }
 
+function DraftRosterPreview({ picks, order, current }) {
+  return (
+    <div className="dash draft-preview">
+      {order.map(p => {
+        const treasures = picks.filter(x => x.player === p && x.type === "treasure");
+        const trash     = picks.filter(x => x.player === p && x.type === "trash");
+        return (
+          <div className={"col" + (p === current ? " col-on" : "")} key={p}>
+            <div className="col-head">{p}</div>
+            <div className="sec-head treasure">💎 Treasures</div>
+            <table className="tt"><tbody>
+              {Array.from({ length: PER_CAT }).map((_, i) => {
+                const pk = treasures[i];
+                return pk
+                  ? <tr key={i}><td className="tm" style={{ ["--tc"]: COLORS[pk.team] || "#666" }} title={pk.team}>{pk.team}</td></tr>
+                  : <tr key={i} className="empty-slot"><td className="tm">—</td></tr>;
+              })}
+            </tbody></table>
+            <div className="sec-head trash">🗑️ Trash</div>
+            <table className="tt"><tbody>
+              {Array.from({ length: PER_CAT }).map((_, i) => {
+                const pk = trash[i];
+                return pk
+                  ? <tr key={i}><td className="tm" style={{ ["--tc"]: COLORS[pk.team] || "#666" }} title={pk.team}>{pk.team}</td></tr>
+                  : <tr key={i} className="empty-slot"><td className="tm">—</td></tr>;
+              })}
+            </tbody></table>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---- Draft ----
 function Draft({ commitSeason }) {
   const [draft, setDraft] = useState(() => loadDraft() || { phase: "order", order: [...PLAYERS], picks: [] });
@@ -551,14 +588,7 @@ function Draft({ commitSeason }) {
           <button className="btn ghost" onClick={restart}>Restart</button>
         </div>
       </div>
-      <div className="clock">
-        {draft.order.map(p => (
-          <div className={"clockcard" + (p === current ? " on" : "")} key={p}>
-            <div className="cname">{p}</div>
-            <div className="ccounts">💎 <b>{counts[p].treasure}</b>/4 · 🗑️ <b>{counts[p].trash}</b>/4</div>
-          </div>
-        ))}
-      </div>
+      <DraftRosterPreview picks={draft.picks} order={draft.order} current={current} />
       {["AFC","NFC"].map(conf => {
         const confDivs = DIVISIONS.filter(d => d.conf === conf);
         const anyAvail = confDivs.some(d => d.teams.some(t => !taken.has(t)));
