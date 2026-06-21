@@ -94,8 +94,13 @@
   .clockcard .ccounts { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
   .clockcard .ccounts b { color: var(--text); }
   .teamgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
-  .teamcard { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--tc, #666); border-radius: 9px; padding: 7px 8px 7px 10px; }
+  .teamcard { display: flex; flex-direction: column; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--tc, #666); border-radius: 9px; padding: 8px 10px; }
+  .teamcard-top { display: flex; align-items: center; gap: 6px; }
   .teamcard .tnm { flex: 1; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rank-badge { font-size: 10px; font-weight: 800; color: var(--muted); white-space: nowrap; }
+  .trec-detail { font-size: 10.5px; color: var(--muted); }
+  .espn-status { font-size: 12px; color: var(--muted); margin: 8px 0 12px; display: flex; align-items: center; gap: 8px; }
+  .espn-status.err { color: var(--pink); }
   .pickbtn { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 4px 9px; font-size: 13px; font-weight: 700; cursor: pointer; }
   .pickbtn:disabled { opacity: .3; cursor: default; }
   .pickbtn.t:not(:disabled):hover { border-color: var(--treasure); }
@@ -107,7 +112,6 @@
   .conf-group { margin-bottom: 20px; }
   .conf-header { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .div-header { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 0 0 6px; }
-  .teamcard .trec { font-size: 10.5px; color: var(--muted); white-space: nowrap; margin-right: 4px; }
 
   /* Edit tab */
   .editgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
@@ -153,17 +157,28 @@ const DIVISIONS = [
   { conf:"NFC", div:"West",  teams:["Arizona Cardinals","Los Angeles Rams","San Francisco 49ers","Seattle Seahawks"] },
 ];
 
-// 2024 NFL regular season records
-const PREV_RECORDS = {
-  "Buffalo Bills":[13,4],"Miami Dolphins":[8,9],"New England Patriots":[4,13],"New York Jets":[5,12],
-  "Baltimore Ravens":[12,5],"Cincinnati Bengals":[9,8],"Cleveland Browns":[3,14],"Pittsburgh Steelers":[10,7],
-  "Houston Texans":[10,7],"Indianapolis Colts":[8,9],"Jacksonville Jaguars":[4,13],"Tennessee Titans":[3,14],
-  "Denver Broncos":[10,7],"Kansas City Chiefs":[15,2],"Las Vegas Raiders":[4,13],"Los Angeles Chargers":[11,6],
-  "Dallas Cowboys":[7,10],"New York Giants":[3,14],"Philadelphia Eagles":[14,3],"Washington Commanders":[12,5],
-  "Chicago Bears":[5,12],"Detroit Lions":[15,2],"Green Bay Packers":[11,6],"Minnesota Vikings":[14,3],
-  "Atlanta Falcons":[8,9],"Carolina Panthers":[5,12],"New Orleans Saints":[5,12],"Tampa Bay Buccaneers":[10,7],
-  "Arizona Cardinals":[8,9],"Los Angeles Rams":[10,7],"San Francisco 49ers":[6,11],"Seattle Seahawks":[10,7],
-};
+// Fetches the previous NFL regular season standings from ESPN's public API.
+// Returns { teamDisplayName: { w, l, pct, rank } } where rank is overall NFL rank (1–32).
+const ESPN_SEASON = 2025;
+async function fetchTeamData() {
+  const url = `https://site.api.espn.com/apis/v2/sports/football/nfl/standings?season=${ESPN_SEASON}&seasontype=2`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`ESPN ${res.status}`);
+  const data = await res.json();
+  const all = [];
+  for (const conf of (data.children || [])) {
+    for (const entry of (conf.standings?.entries || [])) {
+      const name = entry.team?.displayName;
+      if (!name) continue;
+      const s = Object.fromEntries((entry.stats || []).map(x => [x.name, x.value]));
+      all.push({ name, w: s.wins ?? 0, l: s.losses ?? 0, pct: s.winPercent ?? 0 });
+    }
+  }
+  all.sort((a, b) => b.pct - a.pct || b.w - a.w);
+  const result = {};
+  all.forEach((t, i) => { result[t.name] = { w: t.w, l: t.l, pct: t.pct, rank: i + 1 }; });
+  return result;
+}
 
 // Seed: current records [W, L] for each player's 8 active teams.
 // (Swapped-in teams show partial records, mirroring the sheet.)
@@ -477,7 +492,19 @@ function DraftRosterPreview({ picks, order, current }) {
 // ---- Draft ----
 function Draft({ commitSeason }) {
   const [draft, setDraft] = useState(() => loadDraft() || { phase: "order", order: [...PLAYERS], picks: [] });
+  const [teamData, setTeamData] = useState(null);
+  const [tdLoading, setTdLoading] = useState(true);
+  const [tdError, setTdError] = useState(null);
+
   useEffect(() => { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); }, [draft]);
+
+  function loadESPN() {
+    setTdLoading(true); setTdError(null);
+    fetchTeamData()
+      .then(d => { setTeamData(d); setTdLoading(false); })
+      .catch(e => { setTdError(e.message || "Failed"); setTdLoading(false); });
+  }
+  useEffect(loadESPN, []);
 
   const totalPicks = ROUNDS * PLAYERS.length; // 32
   const taken = useMemo(() => new Set(draft.picks.map(p => p.team)), [draft.picks]);
@@ -524,6 +551,9 @@ function Draft({ commitSeason }) {
     return (
       <div>
         <div className="sub" style={{ marginBottom: 8 }}>Set the draft order, then snake-draft 4 💎 Treasures and 4 🗑️ Trash for each player — 8 rounds, every NFL team goes exactly once.</div>
+        {tdLoading && <div className="espn-status">⏳ Loading {ESPN_SEASON} standings from ESPN…</div>}
+        {tdError && <div className="espn-status err">⚠️ ESPN load failed: {tdError} <button className="btn ghost" style={{marginLeft:8,padding:"3px 10px"}} onClick={loadESPN}>Retry</button></div>}
+        {teamData && <div className="espn-status">✓ {ESPN_SEASON} standings loaded</div>}
         <button className="btn ghost" onClick={randomize}>🎲 Randomize order</button>
         <div className="draft-order-list">
           {draft.order.map((p, i) => (
@@ -535,7 +565,7 @@ function Draft({ commitSeason }) {
             </div>
           ))}
         </div>
-        <button className="btn" onClick={startDraft}>Start draft →</button>
+        <button className="btn" onClick={startDraft} disabled={tdLoading}>Start draft →</button>
       </div>
     );
   }
@@ -597,20 +627,25 @@ function Draft({ commitSeason }) {
           <div className="conf-group" key={conf}>
             <div className="conf-header">{conf}</div>
             {confDivs.map(({ div, teams }) => {
-              const avail = teams.filter(t => !taken.has(t));
+              const avail = teams
+                .filter(t => !taken.has(t))
+                .sort((a, b) => (teamData?.[a]?.rank ?? 99) - (teamData?.[b]?.rank ?? 99));
               if (!avail.length) return null;
               return (
                 <div className="div-section" key={div}>
                   <div className="div-header">{div}</div>
                   <div className="teamgrid">
                     {avail.map(t => {
-                      const pr = PREV_RECORDS[t];
+                      const td = teamData?.[t];
                       return (
                         <div className="teamcard" key={t} style={{ ["--tc"]: COLORS[t] || "#666" }}>
-                          <span className="tnm" title={t}>{t}</span>
-                          {pr && <span className="trec">{pr[0]}-{pr[1]}</span>}
-                          <button className="pickbtn t" disabled={counts[current].treasure >= PER_CAT} onClick={() => pick(t, "treasure")} title="Draft as Treasure">💎</button>
-                          <button className="pickbtn tr" disabled={counts[current].trash >= PER_CAT} onClick={() => pick(t, "trash")} title="Draft as Trash">🗑️</button>
+                          <div className="teamcard-top">
+                            <span className="tnm" title={t}>{t}</span>
+                            {td && <span className="rank-badge">#{td.rank}</span>}
+                            <button className="pickbtn t" disabled={counts[current].treasure >= PER_CAT} onClick={() => pick(t, "treasure")} title="Draft as Treasure">💎</button>
+                            <button className="pickbtn tr" disabled={counts[current].trash >= PER_CAT} onClick={() => pick(t, "trash")} title="Draft as Trash">🗑️</button>
+                          </div>
+                          {td && <div className="trec-detail">{td.w}–{td.l} · {td.pct.toFixed(3).replace(/^0/, "")}</div>}
                         </div>
                       );
                     })}
