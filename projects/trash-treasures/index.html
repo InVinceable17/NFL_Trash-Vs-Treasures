@@ -100,6 +100,11 @@
   .pickbtn:disabled { opacity: .3; cursor: default; }
   .pickbtn.t:not(:disabled):hover { border-color: var(--treasure); }
   .pickbtn.tr:not(:disabled):hover { border-color: var(--trash); }
+  .div-section { margin-bottom: 16px; }
+  .conf-group { margin-bottom: 20px; }
+  .conf-header { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .div-header { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 0 0 6px; }
+  .teamcard .trec { font-size: 10.5px; color: var(--muted); white-space: nowrap; margin-right: 4px; }
 
   /* Edit tab */
   .editgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
@@ -132,6 +137,29 @@ const COLORS = {
   "New Orleans Saints":"#D3BC8D","Miami Dolphins":"#008E97","New York Jets":"#125740","Atlanta Falcons":"#A71930",
   "New York Giants":"#0B2265","Dallas Cowboys":"#869397","Tampa Bay Buccaneers":"#D50A0A","Arizona Cardinals":"#97233F",
   "Cleveland Browns":"#FF3C00","Minnesota Vikings":"#4F2683","Chicago Bears":"#0B162A","Kansas City Chiefs":"#E31837"
+};
+
+const DIVISIONS = [
+  { conf:"AFC", div:"East",  teams:["Buffalo Bills","Miami Dolphins","New England Patriots","New York Jets"] },
+  { conf:"AFC", div:"North", teams:["Baltimore Ravens","Cincinnati Bengals","Cleveland Browns","Pittsburgh Steelers"] },
+  { conf:"AFC", div:"South", teams:["Houston Texans","Indianapolis Colts","Jacksonville Jaguars","Tennessee Titans"] },
+  { conf:"AFC", div:"West",  teams:["Denver Broncos","Kansas City Chiefs","Las Vegas Raiders","Los Angeles Chargers"] },
+  { conf:"NFC", div:"East",  teams:["Dallas Cowboys","New York Giants","Philadelphia Eagles","Washington Commanders"] },
+  { conf:"NFC", div:"North", teams:["Chicago Bears","Detroit Lions","Green Bay Packers","Minnesota Vikings"] },
+  { conf:"NFC", div:"South", teams:["Atlanta Falcons","Carolina Panthers","New Orleans Saints","Tampa Bay Buccaneers"] },
+  { conf:"NFC", div:"West",  teams:["Arizona Cardinals","Los Angeles Rams","San Francisco 49ers","Seattle Seahawks"] },
+];
+
+// 2024 NFL regular season records
+const PREV_RECORDS = {
+  "Buffalo Bills":[13,4],"Miami Dolphins":[8,9],"New England Patriots":[4,13],"New York Jets":[5,12],
+  "Baltimore Ravens":[12,5],"Cincinnati Bengals":[9,8],"Cleveland Browns":[3,14],"Pittsburgh Steelers":[10,7],
+  "Houston Texans":[10,7],"Indianapolis Colts":[8,9],"Jacksonville Jaguars":[4,13],"Tennessee Titans":[3,14],
+  "Denver Broncos":[10,7],"Kansas City Chiefs":[15,2],"Las Vegas Raiders":[4,13],"Los Angeles Chargers":[11,6],
+  "Dallas Cowboys":[7,10],"New York Giants":[3,14],"Philadelphia Eagles":[14,3],"Washington Commanders":[12,5],
+  "Chicago Bears":[5,12],"Detroit Lions":[15,2],"Green Bay Packers":[11,6],"Minnesota Vikings":[14,3],
+  "Atlanta Falcons":[8,9],"Carolina Panthers":[5,12],"New Orleans Saints":[5,12],"Tampa Bay Buccaneers":[10,7],
+  "Arizona Cardinals":[8,9],"Los Angeles Rams":[10,7],"San Francisco 49ers":[6,11],"Seattle Seahawks":[10,7],
 };
 
 // Seed: current records [W, L] for each player's 8 active teams.
@@ -531,15 +559,38 @@ function Draft({ commitSeason }) {
           </div>
         ))}
       </div>
-      <div className="teamgrid">
-        {ALL_TEAMS.filter(t => !taken.has(t)).map(t => (
-          <div className="teamcard" key={t} style={{ ["--tc"]: COLORS[t] || "#666" }}>
-            <span className="tnm" title={t}>{t}</span>
-            <button className="pickbtn t" disabled={counts[current].treasure >= PER_CAT} onClick={() => pick(t, "treasure")} title="Draft as Treasure">💎</button>
-            <button className="pickbtn tr" disabled={counts[current].trash >= PER_CAT} onClick={() => pick(t, "trash")} title="Draft as Trash">🗑️</button>
+      {["AFC","NFC"].map(conf => {
+        const confDivs = DIVISIONS.filter(d => d.conf === conf);
+        const anyAvail = confDivs.some(d => d.teams.some(t => !taken.has(t)));
+        if (!anyAvail) return null;
+        return (
+          <div className="conf-group" key={conf}>
+            <div className="conf-header">{conf}</div>
+            {confDivs.map(({ div, teams }) => {
+              const avail = teams.filter(t => !taken.has(t));
+              if (!avail.length) return null;
+              return (
+                <div className="div-section" key={div}>
+                  <div className="div-header">{div}</div>
+                  <div className="teamgrid">
+                    {avail.map(t => {
+                      const pr = PREV_RECORDS[t];
+                      return (
+                        <div className="teamcard" key={t} style={{ ["--tc"]: COLORS[t] || "#666" }}>
+                          <span className="tnm" title={t}>{t}</span>
+                          {pr && <span className="trec">{pr[0]}-{pr[1]}</span>}
+                          <button className="pickbtn t" disabled={counts[current].treasure >= PER_CAT} onClick={() => pick(t, "treasure")} title="Draft as Treasure">💎</button>
+                          <button className="pickbtn tr" disabled={counts[current].trash >= PER_CAT} onClick={() => pick(t, "trash")} title="Draft as Trash">🗑️</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        ))}
-      </div>
+        );
+      })}
     </div>
   );
 }
