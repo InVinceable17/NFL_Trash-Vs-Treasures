@@ -93,25 +93,41 @@
   .clockcard .cname { font-weight: 800; font-size: 14px; }
   .clockcard .ccounts { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
   .clockcard .ccounts b { color: var(--text); }
-  .teamgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
-  .teamcard { display: flex; flex-direction: column; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--tc, #666); border-radius: 9px; padding: 8px 10px; }
-  .teamcard-top { display: flex; align-items: center; gap: 6px; }
-  .teamcard .tnm { flex: 1; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .rank-badge { font-size: 10px; font-weight: 800; color: var(--muted); white-space: nowrap; }
-  .trec-detail { font-size: 10.5px; color: var(--muted); }
-  .espn-status { font-size: 12px; color: var(--muted); margin: 8px 0 12px; display: flex; align-items: center; gap: 8px; }
-  .espn-status.err { color: var(--pink); }
+  /* Draft — division grid layout */
+  .conf-group { margin-bottom: 24px; }
+  .conf-header { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .conf-div-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  @media (max-width: 900px) { .conf-div-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 500px) { .conf-div-grid { grid-template-columns: 1fr; } }
+  .div-col { display: flex; flex-direction: column; gap: 8px; }
+  .div-header { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  /* Draft — team card */
+  .teamcard { display: flex; flex-direction: column; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--tc, #666); border-radius: 10px; padding: 12px; }
+  .teamcard-top { display: flex; align-items: center; gap: 10px; }
+  .team-logo { width: 40px; height: 40px; object-fit: contain; flex-shrink: 0; }
+  .team-info { flex: 1; min-width: 0; }
+  .teamcard .tnm { font-size: 12.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+  .team-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 4px; margin-top: 6px; }
+  .stat-item { display: flex; flex-direction: column; gap: 1px; }
+  .stat-label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+  .stat-val { font-size: 12px; font-weight: 800; }
+  .teamcard-btns { display: flex; gap: 6px; }
+  .teamcard-btns .pickbtn { flex: 1; font-size: 12px; padding: 6px 4px; }
+  /* Draft — pick buttons */
   .pickbtn { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 4px 9px; font-size: 13px; font-weight: 700; cursor: pointer; }
   .pickbtn:disabled { opacity: .3; cursor: default; }
-  .pickbtn.t:not(:disabled):hover { border-color: var(--treasure); }
-  .pickbtn.tr:not(:disabled):hover { border-color: var(--trash); }
+  .pickbtn.t:not(:disabled):hover { border-color: var(--treasure); background: rgba(245,197,66,.1); }
+  .pickbtn.tr:not(:disabled):hover { border-color: var(--trash); background: rgba(79,176,255,.1); }
+  /* Draft — roster preview */
   .col.col-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   tr.empty-slot td { color: var(--line); border-left-color: transparent !important; }
   .draft-preview { margin-bottom: 16px; }
-  .div-section { margin-bottom: 16px; }
-  .conf-group { margin-bottom: 20px; }
-  .conf-header { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
-  .div-header { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 0 0 6px; }
+  /* Draft — ESPN status */
+  .espn-status { font-size: 12px; color: var(--muted); margin: 8px 0 12px; display: flex; align-items: center; gap: 8px; }
+  .espn-status.err { color: var(--pink); }
+  /* Draft — drag order */
+  .draft-order-item { cursor: grab; user-select: none; }
+  .draft-order-item.dragging { opacity: 0.35; }
 
   /* Edit tab */
   .editgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
@@ -171,12 +187,13 @@ async function fetchTeamData() {
       const name = entry.team?.displayName;
       if (!name) continue;
       const s = Object.fromEntries((entry.stats || []).map(x => [x.name, x.value]));
-      all.push({ name, w: s.wins ?? 0, l: s.losses ?? 0, pct: s.winPercent ?? 0 });
+      const abbrev = (entry.team?.abbreviation || '').toLowerCase();
+      all.push({ name, abbrev, w: s.wins ?? 0, l: s.losses ?? 0, pct: s.winPercent ?? 0 });
     }
   }
   all.sort((a, b) => b.pct - a.pct || b.w - a.w);
   const result = {};
-  all.forEach((t, i) => { result[t.name] = { w: t.w, l: t.l, pct: t.pct, rank: i + 1 }; });
+  all.forEach((t, i) => { result[t.name] = { w: t.w, l: t.l, pct: t.pct, rank: i + 1, abbrev: t.abbrev }; });
   return result;
 }
 
@@ -495,6 +512,8 @@ function Draft({ commitSeason }) {
   const [teamData, setTeamData] = useState(null);
   const [tdLoading, setTdLoading] = useState(true);
   const [tdError, setTdError] = useState(null);
+  const [dragPlayer, setDragPlayer] = useState(null);
+  const dragFromIdx = React.useRef(null);
 
   useEffect(() => { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); }, [draft]);
 
@@ -506,7 +525,7 @@ function Draft({ commitSeason }) {
   }
   useEffect(loadESPN, []);
 
-  const totalPicks = ROUNDS * PLAYERS.length; // 32
+  const totalPicks = ROUNDS * PLAYERS.length;
   const taken = useMemo(() => new Set(draft.picks.map(p => p.team)), [draft.picks]);
   const counts = useMemo(() => {
     const c = {}; PLAYERS.forEach(p => c[p] = { treasure: 0, trash: 0 });
@@ -526,6 +545,17 @@ function Draft({ commitSeason }) {
     setDraft(d => { const o = [...d.order]; for (let i = o.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; } return { ...d, order: o }; });
   }
   function startDraft() { setDraft(d => ({ ...d, phase: "draft" })); }
+
+  // drag-and-drop order
+  function onDragStart(e, p, i) { dragFromIdx.current = i; setDragPlayer(p); e.dataTransfer.effectAllowed = "move"; }
+  function onDragOver(e, i) {
+    e.preventDefault();
+    const from = dragFromIdx.current;
+    if (from === null || from === i) return;
+    setDraft(d => { const o = [...d.order]; const [item] = o.splice(from, 1); o.splice(i, 0, item); return { ...d, order: o }; });
+    dragFromIdx.current = i;
+  }
+  function onDragEnd() { dragFromIdx.current = null; setDragPlayer(null); }
 
   // draft phase
   function pick(team, type) {
@@ -550,14 +580,21 @@ function Draft({ commitSeason }) {
   if (draft.phase === "order") {
     return (
       <div>
-        <div className="sub" style={{ marginBottom: 8 }}>Set the draft order, then snake-draft 4 💎 Treasures and 4 🗑️ Trash for each player — 8 rounds, every NFL team goes exactly once.</div>
+        <div className="sub" style={{ marginBottom: 8 }}>Drag to reorder, then snake-draft 4 💎 Treasures and 4 🗑️ Trash per player — 8 rounds, every NFL team goes exactly once.</div>
         {tdLoading && <div className="espn-status">⏳ Loading {ESPN_SEASON} standings from ESPN…</div>}
         {tdError && <div className="espn-status err">⚠️ ESPN load failed: {tdError} <button className="btn ghost" style={{marginLeft:8,padding:"3px 10px"}} onClick={loadESPN}>Retry</button></div>}
         {teamData && <div className="espn-status">✓ {ESPN_SEASON} standings loaded</div>}
-        <button className="btn ghost" onClick={randomize}>🎲 Randomize order</button>
+        <button className="btn ghost" onClick={randomize} style={{ marginBottom: 12 }}>🎲 Randomize order</button>
         <div className="draft-order-list">
           {draft.order.map((p, i) => (
-            <div className="draft-order-item" key={p}>
+            <div
+              className={"draft-order-item" + (dragPlayer === p ? " dragging" : "")}
+              key={p}
+              draggable
+              onDragStart={e => onDragStart(e, p, i)}
+              onDragOver={e => onDragOver(e, i)}
+              onDragEnd={onDragEnd}
+            >
               <span className="num">{i + 1}</span>
               <span className="nm">{p}</span>
               <button className="iconbtn" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
@@ -626,33 +663,45 @@ function Draft({ commitSeason }) {
         return (
           <div className="conf-group" key={conf}>
             <div className="conf-header">{conf}</div>
-            {confDivs.map(({ div, teams }) => {
-              const avail = teams
-                .filter(t => !taken.has(t))
-                .sort((a, b) => (teamData?.[a]?.rank ?? 99) - (teamData?.[b]?.rank ?? 99));
-              if (!avail.length) return null;
-              return (
-                <div className="div-section" key={div}>
-                  <div className="div-header">{div}</div>
-                  <div className="teamgrid">
+            <div className="conf-div-grid">
+              {confDivs.map(({ div, teams }) => {
+                const avail = teams
+                  .filter(t => !taken.has(t))
+                  .sort((a, b) => (teamData?.[a]?.rank ?? 99) - (teamData?.[b]?.rank ?? 99));
+                return (
+                  <div className="div-col" key={div}>
+                    <div className="div-header">{div}</div>
                     {avail.map(t => {
                       const td = teamData?.[t];
+                      const logo = td?.abbrev ? `https://a.espn.com/combiner/i?img=/i/teamlogos/nfl/500/${td.abbrev}.png&h=50&w=50&transparent=true` : null;
                       return (
                         <div className="teamcard" key={t} style={{ ["--tc"]: COLORS[t] || "#666" }}>
                           <div className="teamcard-top">
-                            <span className="tnm" title={t}>{t}</span>
-                            {td && <span className="rank-badge">#{td.rank}</span>}
-                            <button className="pickbtn t" disabled={counts[current].treasure >= PER_CAT} onClick={() => pick(t, "treasure")} title="Draft as Treasure">💎</button>
-                            <button className="pickbtn tr" disabled={counts[current].trash >= PER_CAT} onClick={() => pick(t, "trash")} title="Draft as Trash">🗑️</button>
+                            {logo && <img className="team-logo" src={logo} alt="" />}
+                            <div className="team-info">
+                              <span className="tnm" title={t}>{t}</span>
+                              {td && (
+                                <div className="team-stats">
+                                  <div className="stat-item"><span className="stat-label">Wins</span><span className="stat-val">{td.w}</span></div>
+                                  <div className="stat-item"><span className="stat-label">Losses</span><span className="stat-val">{td.l}</span></div>
+                                  <div className="stat-item"><span className="stat-label">PCT</span><span className="stat-val">{td.pct.toFixed(3).replace(/^0/, "")}</span></div>
+                                  <div className="stat-item"><span className="stat-label">Rank</span><span className="stat-val">#{td.rank}</span></div>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          {td && <div className="trec-detail">{td.w}–{td.l} · {td.pct.toFixed(3).replace(/^0/, "")}</div>}
+                          <div className="teamcard-btns">
+                            <button className="pickbtn t" disabled={counts[current].treasure >= PER_CAT} onClick={() => pick(t, "treasure")}>💎 Treasure</button>
+                            <button className="pickbtn tr" disabled={counts[current].trash >= PER_CAT} onClick={() => pick(t, "trash")}>🗑️ Trash</button>
+                          </div>
                         </div>
                       );
                     })}
+                    {!avail.length && <div style={{color:"var(--line)",fontSize:11,textAlign:"center",padding:"8px 0"}}>all picked</div>}
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         );
       })}
