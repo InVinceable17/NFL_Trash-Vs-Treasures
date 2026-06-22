@@ -166,21 +166,55 @@ const { useState, useEffect, useMemo, useRef } = React;
 // ---- Firestore ----
 const db = firebase.firestore();
 
+function toFirestoreFormat(state) {
+  const roster = {};
+  Object.entries(state.roster || {}).forEach(([player, sections]) => {
+    roster[player] = {
+      treasures: {
+        active: (sections.treasures?.active || []).map(([team, swap]) => ({ team, swap })),
+        locked: (sections.treasures?.locked || []).map(([team, w, l, period]) => ({ team, w, l, period }))
+      },
+      trash: {
+        active: (sections.trash?.active || []).map(([team, swap]) => ({ team, swap })),
+        locked: (sections.trash?.locked || []).map(([team, w, l, period]) => ({ team, w, l, period }))
+      }
+    };
+  });
+  return { ...state, roster };
+}
+
+function fromFirestoreFormat(state) {
+  const roster = {};
+  Object.entries(state.roster || {}).forEach(([player, sections]) => {
+    roster[player] = {
+      treasures: {
+        active: (sections.treasures?.active || []).map(({team, swap}) => [team, swap]),
+        locked: (sections.treasures?.locked || []).map(({team, w, l, period}) => [team, w, l, period])
+      },
+      trash: {
+        active: (sections.trash?.active || []).map(({team, swap}) => [team, swap]),
+        locked: (sections.trash?.locked || []).map(({team, w, l, period}) => [team, w, l, period])
+      }
+    };
+  });
+  return { ...state, roster };
+}
+
 async function fsLoad(leagueId) {
   try {
     const doc = await db.collection("leagues").doc(leagueId).get();
-    return doc.exists ? doc.data() : null;
+    return doc.exists ? fromFirestoreFormat(doc.data()) : null;
   } catch(e) { console.warn("Firestore load:", e); return null; }
 }
 
 async function fsSave(leagueId, st) {
-  try { await db.collection("leagues").doc(leagueId).set(st); }
+  try { await db.collection("leagues").doc(leagueId).set(toFirestoreFormat(st)); }
   catch(e) { console.warn("Firestore save:", e); throw e; }
 }
 
 function fsSubscribe(leagueId, onData) {
   return db.collection("leagues").doc(leagueId).onSnapshot(
-    doc => { if (doc.exists) onData(doc.data()); },
+    doc => { if (doc.exists) onData(fromFirestoreFormat(doc.data())); },
     err => console.warn("Firestore subscription:", err)
   );
 }
