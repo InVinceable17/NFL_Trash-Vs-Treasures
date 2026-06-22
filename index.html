@@ -869,7 +869,7 @@ function App({ initState, leagueInfo, remoteUpdate }) {
         : tab === "edit"
         ? <Edit st={st} setSt={setSt} players={players} />
         : tab === "swap"
-        ? <Swap st={st} setSt={setSt} players={players} />
+        ? <Swap st={st} setSt={setSt} players={players} replayRecords={replayMode ? replayRecords : null} />
         : <Draft commitSeason={commitSeason} players={players} leagueId={LEAGUE_ID} />}
     </div>
   );
@@ -1026,7 +1026,7 @@ const SWAP_WINDOWS = [
   { key: "wk12", label: "After Week 12", period: "Weeks 7-12" },
 ];
 
-function Swap({ st, setSt, players }) {
+function Swap({ st, setSt, players, replayRecords }) {
   const doneWk6  = players.some(p => {
     const r = st.roster[p];
     return r && ([...r.treasures.active, ...r.trash.active].some(([,s]) => s === "wk6"));
@@ -1066,6 +1066,8 @@ function Swap({ st, setSt, players }) {
     setSt(prev => {
       const roster  = JSON.parse(JSON.stringify(prev.roster));
       const records = { ...prev.records };
+      // Use replay records for banking if replaying, so locked rows reflect historical performance
+      const source  = replayRecords || prev.records;
 
       for (const player of players) {
         const sel = selections[player];
@@ -1073,7 +1075,7 @@ function Swap({ st, setSt, players }) {
 
         if (sel.treasureOut) {
           const team   = sel.treasureOut;
-          const [w, l] = records[team] || [0, 0];
+          const [w, l] = source[team] || [0, 0];
           pr.treasures.locked.push([team, w, l, winInfo.period]);
           pr.treasures.active = pr.treasures.active.filter(([t]) => t !== team);
           pr.trash.active.push([team, winInfo.key]);
@@ -1082,7 +1084,7 @@ function Swap({ st, setSt, players }) {
 
         if (sel.trashOut) {
           const team   = sel.trashOut;
-          const [w, l] = records[team] || [0, 0];
+          const [w, l] = source[team] || [0, 0];
           pr.trash.locked.push([team, w, l, winInfo.period]);
           pr.trash.active = pr.trash.active.filter(([t]) => t !== team);
           pr.treasures.active.push([team, winInfo.key]);
