@@ -684,17 +684,17 @@ function ReplayBar({ week, setWeek, season, setSeason, loading, error, onExit })
         {REPLAY_SEASONS.map(s => (
           <button key={s} className={"btn" + (season === s ? "" : " ghost")}
             style={{ padding: "4px 10px", fontSize: 12 }}
-            onClick={() => { setSeason(s); setWeek(1); }}
+            onClick={() => { setSeason(s); setWeek(0); }}
             disabled={loading}>
             {s}
           </button>
         ))}
       </div>
-      <button className="btn ghost" style={{ padding: "5px 10px" }} onClick={() => setWeek(w => Math.max(1, w - 1))} disabled={week <= 1 || loading}>◀</button>
-      <span className="week-label">{loading ? "Loading…" : `Week ${week} of ${REPLAY_WEEKS}`}</span>
+      <button className="btn ghost" style={{ padding: "5px 10px" }} onClick={() => setWeek(w => Math.max(0, w - 1))} disabled={week <= 0 || loading}>◀</button>
+      <span className="week-label">{loading ? "Loading…" : week === 0 ? "Pre-season" : `Week ${week} of ${REPLAY_WEEKS}`}</span>
       <button className="btn ghost" style={{ padding: "5px 10px" }} onClick={() => setWeek(w => Math.min(REPLAY_WEEKS, w + 1))} disabled={week >= REPLAY_WEEKS || loading}>▶</button>
       <div className="week-track">
-        <input type="range" min={1} max={REPLAY_WEEKS} value={week} disabled={loading}
+        <input type="range" min={0} max={REPLAY_WEEKS} value={week} disabled={loading}
           onChange={e => setWeek(Number(e.target.value))} />
       </div>
       {error && <span style={{ color: "var(--pink)", fontSize: 12 }}>⚠️ {error}</span>}
@@ -739,6 +739,14 @@ function App({ initState, leagueInfo, remoteUpdate }) {
   // Fetch and accumulate records up to the selected replay week
   useEffect(() => {
     if (!replayMode) return;
+    if (replayWeek === 0) {
+      const zeros = {};
+      Object.keys(st.records).forEach(t => { zeros[t] = [0, 0]; });
+      setReplayRecords(zeros);
+      setReplayLoading(false);
+      setReplayError(null);
+      return;
+    }
     let cancelled = false;
     async function load() {
       setReplayLoading(true);
@@ -797,7 +805,7 @@ function App({ initState, leagueInfo, remoteUpdate }) {
 
   function commitSeason(newState) { setSt(newState); setTab("dashboard"); }
 
-  function enterReplay() { setReplayMode(true); setReplaySeason(2025); setReplayWeek(1); setReplayRecords(null); setTab("dashboard"); }
+  function enterReplay() { setReplayMode(true); setReplaySeason(2025); setReplayWeek(0); setReplayRecords(null); setTab("dashboard"); }
   function exitReplay()  { setReplayMode(false); setReplayRecords(null); setReplayError(null); }
 
   const [copied, setCopied] = useState(false);
@@ -849,16 +857,14 @@ function App({ initState, leagueInfo, remoteUpdate }) {
         />
       )}
 
-      {!replayMode && (
-        <div className="tabs">
-          <button className={"tab" + (tab === "dashboard" ? " active" : "")} onClick={() => setTab("dashboard")}>Dashboard</button>
-          {IS_ADMIN && <button className={"tab" + (tab === "edit" ? " active" : "")} onClick={() => setTab("edit")}>Edit</button>}
-          {IS_ADMIN && <button className={"tab" + (tab === "swap" ? " active" : "")} onClick={() => setTab("swap")}>Swap</button>}
-          {IS_ADMIN && <button className={"tab" + (tab === "draft" ? " active" : "")} onClick={() => setTab("draft")}>Draft</button>}
-        </div>
-      )}
+      <div className="tabs">
+        <button className={"tab" + (tab === "dashboard" ? " active" : "")} onClick={() => setTab("dashboard")}>Dashboard</button>
+        {IS_ADMIN && <button className={"tab" + (tab === "edit" ? " active" : "")} onClick={() => setTab("edit")}>Edit</button>}
+        {IS_ADMIN && <button className={"tab" + (tab === "swap" ? " active" : "")} onClick={() => setTab("swap")}>Swap</button>}
+        {IS_ADMIN && <button className={"tab" + (tab === "draft" ? " active" : "")} onClick={() => setTab("draft")}>Draft</button>}
+      </div>
 
-      {tab === "dashboard" || replayMode
+      {tab === "dashboard"
         ? <Dashboard st={activeSt} ranking={ranking} players={players} />
         : tab === "edit"
         ? <Edit st={st} setSt={setSt} players={players} />
