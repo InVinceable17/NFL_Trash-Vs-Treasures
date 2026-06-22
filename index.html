@@ -350,6 +350,36 @@ function loadDraft(leagueId) {
   return null;
 }
 
+function exportLeagueData(leagueId, leagueName) {
+  const state = loadLocalState(leagueId);
+  if (!state) { alert("No data found for this league"); return; }
+  const backup = { leagueId, leagueName, exportedAt: new Date().toISOString(), state };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `trash-treasures-${leagueName.replace(/\s+/g, '-')}-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importLeagueData(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const backup = JSON.parse(e.target.result);
+        if (!backup.leagueId || !backup.state || !backup.state.records || !backup.state.roster) {
+          throw new Error("Invalid backup file format");
+        }
+        resolve(backup);
+      } catch(err) { reject(err); }
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsText(file);
+  });
+}
+
 // ========== Root ==========
 function Root() {
   if (!LEAGUE_ID) return <LeagueHome />;
@@ -363,6 +393,8 @@ function LeagueHome() {
   const [newName, setNewName] = useState("");
   const [newPlayers, setNewPlayers] = useState(["","","",""]);
   const [copied, setCopied] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const importFileRef = useRef(null);
   const hasLegacy = !!localStorage.getItem(LEGACY_KEY) && !leagues.some(l => l.legacy);
 
   async function create() {
@@ -411,6 +443,30 @@ function LeagueHome() {
     setLeagues(updated);
   }
 
+  async function handleImport(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setImporting(true);
+      const backup = await importLeagueData(file);
+      const { leagueId, leagueName, state } = backup;
+      const existing = leagues.find(l => l.id === leagueId);
+      if (existing && !confirm(`League "${leagueName}" already exists. Overwrite it?`)) { setImporting(false); return; }
+      const entry = { id: leagueId, name: leagueName, players: state.players || [], createdAt: Date.now() };
+      const updated = existing ? leagues.map(l => l.id === leagueId ? entry : l) : [...leagues, entry];
+      saveLeagues(updated);
+      saveLocalState(leagueId, state);
+      await fsSave(leagueId, state).catch(() => {});
+      setLeagues(updated);
+      alert(`✓ Restored "${leagueName}"`);
+    } catch(err) {
+      alert("Import failed: " + (err.message || err));
+    } finally {
+      setImporting(false);
+      if (importFileRef.current) importFileRef.current.value = "";
+    }
+  }
+
   return (
     <div>
       <div style={{ marginBottom: 28 }}>
@@ -418,11 +474,21 @@ function LeagueHome() {
         <div className="sub">Your leagues</div>
       </div>
 
+      <input ref={importFileRef} type="file" accept=".json" onChange={handleImport} style={{ display: "none" }} />
+
       {hasLegacy && (
         <div className="panel" style={{ marginBottom: 16, borderColor: "var(--accent)" }}>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Found existing season data</div>
           <div className="sub" style={{ marginBottom: 12 }}>Import your 2024 season into the new multi-league system.</div>
           <button className="btn" onClick={importLegacy}>Import 2024 season →</button>
+        </div>
+      )}
+
+      {leagues.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <button className="btn ghost" onClick={() => importFileRef.current?.click()} disabled={importing}>
+            {importing ? "Importing…" : "📥 Restore from backup"}
+          </button>
         </div>
       )}
 
@@ -441,6 +507,7 @@ function LeagueHome() {
               <button className="btn ghost" onClick={() => copyViewerLink(l.id)}>
                 {copied === l.id ? "✓ Copied!" : "Copy viewer link"}
               </button>
+              <button className="btn ghost" onClick={() => exportLeagueData(l.id, l.name)}>📥 Backup</button>
               <button className="btn ghost" style={{ color: "var(--pink)", borderColor: "rgba(255,126,182,.3)" }} onClick={() => deleteLeague(l.id, l.name)}>Delete</button>
               <button className="btn" onClick={() => window.location.href = `?league=${l.id}&admin=1`}>Open →</button>
             </div>
