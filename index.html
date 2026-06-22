@@ -114,6 +114,12 @@
   .espn-status { font-size: 12px; color: var(--muted); margin: 8px 0 12px; display: flex; align-items: center; gap: 8px; }
   .espn-status.err { color: var(--pink); }
 
+  .replay-bar { background: var(--panel-2); border: 1px solid var(--accent); border-radius: 12px; padding: 11px 16px; margin-bottom: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .replay-bar .week-label { font-size: 16px; font-weight: 800; min-width: 110px; text-align: center; }
+  .replay-bar .week-track { flex: 1; min-width: 120px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+  .replay-badge { background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 20px; letter-spacing: .4px; }
+
   .editgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
   @media (max-width: 700px) { .editgrid { grid-template-columns: 1fr; } }
   input[type=number] { width: 46px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; text-align: center; font-size: 12px; }
@@ -284,6 +290,29 @@ const DIVISIONS = [
 ];
 
 const ESPN_SEASON = 2025;
+const REPLAY_SEASON = 2024;
+const REPLAY_WEEKS  = 18;
+
+async function fetchWeekScores(season, week) {
+  const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${week}&dates=${season}`;
+  const res  = await fetch(url);
+  if (!res.ok) throw new Error(`ESPN ${res.status}`);
+  const data = await res.json();
+  const deltas = {};
+  for (const event of (data.events || [])) {
+    const comp = event.competitions?.[0];
+    if (!comp?.status?.type?.completed) continue;
+    for (const c of (comp.competitors || [])) {
+      const name = c.team?.displayName;
+      if (!name) continue;
+      if (!deltas[name]) deltas[name] = [0, 0];
+      if (c.winner) deltas[name][0]++;
+      else          deltas[name][1]++;
+    }
+  }
+  return deltas;
+}
+
 async function fetchTeamData() {
   const url = `https://site.api.espn.com/apis/v2/sports/football/nfl/standings?season=${ESPN_SEASON}&seasontype=2`;
   const res = await fetch(url);
@@ -644,11 +673,37 @@ function LeagueApp() {
   return <App initState={initState} leagueInfo={leagueInfo} remoteUpdate={remoteUpdate} />;
 }
 
+// ========== Replay Bar ==========
+function ReplayBar({ week, setWeek, loading, error, onExit }) {
+  return (
+    <div className="replay-bar">
+      <span className="replay-badge">🔁 REPLAY {REPLAY_SEASON}</span>
+      <button className="btn ghost" style={{ padding: "5px 10px" }} onClick={() => setWeek(w => Math.max(1, w - 1))} disabled={week <= 1 || loading}>◀</button>
+      <span className="week-label">{loading ? "Loading…" : `Week ${week} of ${REPLAY_WEEKS}`}</span>
+      <button className="btn ghost" style={{ padding: "5px 10px" }} onClick={() => setWeek(w => Math.min(REPLAY_WEEKS, w + 1))} disabled={week >= REPLAY_WEEKS || loading}>▶</button>
+      <div className="week-track">
+        <input type="range" min={1} max={REPLAY_WEEKS} value={week} disabled={loading}
+          onChange={e => setWeek(Number(e.target.value))} />
+      </div>
+      {error && <span style={{ color: "var(--pink)", fontSize: 12 }}>⚠️ {error}</span>}
+      <button className="btn ghost" style={{ marginLeft: "auto" }} onClick={onExit}>Exit replay</button>
+    </div>
+  );
+}
+
 // ========== App ==========
 function App({ initState, leagueInfo, remoteUpdate }) {
   const [st, setSt]       = useState(initState);
   const [tab, setTab]     = useState("dashboard");
-  const [syncStatus, setSyncStatus] = useState("saved"); // "saved" | "syncing" | "error"
+  const [syncStatus, setSyncStatus] = useState("saved");
+
+  // Replay state
+  const [replayMode, setReplayMode]   = useState(false);
+  const [replayWeek, setReplayWeek]   = useState(1);
+  const [replayCache, setReplayCache] = useState({}); // week -> cumulative {team:[w,l]}
+  const [replayLoading, setReplayLoading] = useState(false);
+  const [replayError, setReplayError] = useState(null);
+  const [replayRecords, setReplayRecords] = useState(null);
 
   // Apply real-time updates from Firestore (viewer live updates, admin multi-device sync)
   useEffect(() => {
@@ -668,16 +723,56 @@ function App({ initState, leagueInfo, remoteUpdate }) {
     return () => clearTimeout(t);
   }, [st]);
 
+  // Fetch and accumulate records up to the selected replay week
+  useEffect(() => {
+    if (!replayMode) return;
+    let cancelled = false;
+    async function load() {
+      setReplayLoading(true);
+      setReplayError(null);
+      try {
+        // Find highest cached week <= replayWeek to start from
+        let cumulative = {};
+        let startFrom  = 0;
+        for (let w = replayWeek; w >= 1; w--) {
+          if (replayCache[w]) { cumulative = { ...replayCache[w] }; startFrom = w; break; }
+        }
+        for (let w = startFrom + 1; w <= replayWeek; w++) {
+          if (cancelled) return;
+          const deltas = await fetchWeekScores(REPLAY_SEASON, w);
+          const next   = { ...cumulative };
+          for (const [team, [wins, losses]] of Object.entries(deltas)) {
+            if (!next[team]) next[team] = [0, 0];
+            next[team] = [next[team][0] + wins, next[team][1] + losses];
+          }
+          cumulative = next;
+          setReplayCache(c => ({ ...c, [w]: cumulative }));
+        }
+        if (!cancelled) setReplayRecords(cumulative);
+      } catch(e) {
+        if (!cancelled) setReplayError(e.message || "Failed to load week data");
+      } finally {
+        if (!cancelled) setReplayLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [replayMode, replayWeek]);
+
   const players = st.players || SEED_PLAYERS;
+
+  // When replaying, override records with fetched historical data
+  const activeRecords = replayMode && replayRecords ? replayRecords : st.records;
+  const activeSt = replayMode && replayRecords ? { ...st, records: replayRecords } : st;
 
   const ranking = useMemo(() => {
     const totals = {};
-    players.forEach(p => totals[p] = totalScore(p, st));
+    players.forEach(p => totals[p] = totalScore(p, activeSt));
     const order = [...players].sort((a, b) => totals[b] - totals[a]);
     const rank  = {};
     order.forEach((p, i) => rank[p] = i + 1);
     return { totals, rank, order };
-  }, [st, players]);
+  }, [activeSt, players]);
 
   function resetScores() {
     if (!confirm("Reset all W/L records to zero? Keeps the roster intact.")) return;
@@ -688,6 +783,9 @@ function App({ initState, leagueInfo, remoteUpdate }) {
 
   function commitSeason(newState) { setSt(newState); setTab("dashboard"); }
 
+  function enterReplay() { setReplayMode(true); setReplayWeek(1); setReplayRecords(null); setTab("dashboard"); }
+  function exitReplay()  { setReplayMode(false); setReplayRecords(null); setReplayError(null); }
+
   const [copied, setCopied] = useState(false);
   const viewerUrl = `${window.location.origin}${window.location.pathname}?league=${LEAGUE_ID}`;
   function copyViewer() {
@@ -695,7 +793,6 @@ function App({ initState, leagueInfo, remoteUpdate }) {
   }
 
   const leagueName = leagueInfo?.name || "Trash & Treasures";
-
   const syncLabel = { saved: "Saved", syncing: "Saving…", error: "Sync error" }[syncStatus];
   const syncClass = { saved: "saved", syncing: "syncing", error: "error" }[syncStatus];
 
@@ -706,7 +803,7 @@ function App({ initState, leagueInfo, remoteUpdate }) {
           <h1>🗑️ Trash &amp; 💎 Treasures</h1>
           <div className="sub">
             {leagueName}
-            {IS_ADMIN && (
+            {IS_ADMIN && !replayMode && (
               <span title={syncLabel}>
                 <span className={"sync-dot " + syncClass} />
                 <span style={{ fontSize: 11, marginLeft: 4, color: "var(--muted)" }}>{syncLabel}</span>
@@ -715,9 +812,10 @@ function App({ initState, leagueInfo, remoteUpdate }) {
           </div>
         </div>
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-          {IS_ADMIN && <>
+          {IS_ADMIN && !replayMode && <>
             <button className="btn ghost" onClick={copyViewer}>{copied ? "✓ Copied!" : "Share viewer link 🔗"}</button>
             <button className="btn ghost" onClick={resetScores}>Reset scores</button>
+            <button className="btn ghost" onClick={enterReplay}>🔁 Replay {REPLAY_SEASON}</button>
           </>}
           <button className="btn ghost" style={{ fontSize: 12 }} onClick={() => window.location.href = window.location.pathname}>← Leagues</button>
         </div>
@@ -725,14 +823,28 @@ function App({ initState, leagueInfo, remoteUpdate }) {
 
       {!IS_ADMIN && <div className="viewer-banner">👀 View-only — scores update live when the admin makes changes.</div>}
 
-      <div className="tabs">
-        <button className={"tab" + (tab === "dashboard" ? " active" : "")} onClick={() => setTab("dashboard")}>Dashboard</button>
-        {IS_ADMIN && <button className={"tab" + (tab === "edit" ? " active" : "")} onClick={() => setTab("edit")}>Edit</button>}
-        {IS_ADMIN && <button className={"tab" + (tab === "draft" ? " active" : "")} onClick={() => setTab("draft")}>Draft</button>}
-      </div>
+      {replayMode && (
+        <ReplayBar
+          week={replayWeek}
+          setWeek={setReplayWeek}
+          loading={replayLoading}
+          error={replayError}
+          onExit={exitReplay}
+        />
+      )}
 
-      {tab === "dashboard" ? <Dashboard st={st} ranking={ranking} players={players} />
-        : tab === "edit"   ? <Edit st={st} setSt={setSt} players={players} />
+      {!replayMode && (
+        <div className="tabs">
+          <button className={"tab" + (tab === "dashboard" ? " active" : "")} onClick={() => setTab("dashboard")}>Dashboard</button>
+          {IS_ADMIN && <button className={"tab" + (tab === "edit" ? " active" : "")} onClick={() => setTab("edit")}>Edit</button>}
+          {IS_ADMIN && <button className={"tab" + (tab === "draft" ? " active" : "")} onClick={() => setTab("draft")}>Draft</button>}
+        </div>
+      )}
+
+      {tab === "dashboard" || replayMode
+        ? <Dashboard st={activeSt} ranking={ranking} players={players} />
+        : tab === "edit"
+        ? <Edit st={st} setSt={setSt} players={players} />
         : <Draft commitSeason={commitSeason} players={players} leagueId={LEAGUE_ID} />}
     </div>
   );
