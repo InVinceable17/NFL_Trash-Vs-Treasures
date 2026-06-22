@@ -15,8 +15,8 @@
     --treasure: #f5c542;
     --trash: #4fb0ff;
     --accent: #7c5cff;
-    --pink: #ff7eb6;     /* swapped after Weeks 1-6 */
-    --teal: #38d9d9;     /* swapped after Weeks 7-12 */
+    --pink: #ff7eb6;
+    --teal: #38d9d9;
   }
   * { box-sizing: border-box; }
   body {
@@ -32,10 +32,10 @@
   .tab.active { background: var(--panel-2); color: var(--text); }
   button.btn { background: var(--accent); color: white; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
   button.btn.ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
+  button.btn:disabled { opacity: .4; cursor: default; }
   .row { display: flex; align-items: center; gap: 12px; }
   .between { justify-content: space-between; }
 
-  /* Dashboard grid */
   .dash { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
   @media (max-width: 900px) { .dash { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 500px) { .dash { grid-template-columns: 1fr; } }
@@ -62,7 +62,6 @@
   .rankbadge.r1 { background: var(--treasure); color: #1a1a1a; }
   .foot-total { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
 
-  /* Bottom row: standings + legend */
   .bottom { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-top: 16px; align-items: start; }
   @media (max-width: 700px) { .bottom { grid-template-columns: 1fr; } }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
@@ -76,24 +75,16 @@
   .swatch.pink { background: rgba(255,126,182,.4); border-color: var(--pink); }
   .swatch.teal { background: rgba(56,217,217,.4); border-color: var(--teal); }
 
-  /* Draft tab */
   .draft-order-list { display: flex; flex-direction: column; gap: 8px; max-width: 420px; margin: 14px 0 18px; }
-  .draft-order-item { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .draft-order-item { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: grab; user-select: none; }
   .draft-order-item .num { font-weight: 800; color: var(--muted); width: 18px; text-align: center; }
   .draft-order-item .nm { flex: 1; font-weight: 700; }
+  .draft-order-item.dragging { opacity: 0.35; }
   .iconbtn { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 6px; width: 30px; height: 30px; cursor: pointer; font-size: 14px; line-height: 1; }
   .iconbtn:disabled { opacity: .3; cursor: default; }
   .pickbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; margin-bottom: 12px; }
   .pickbar .who { font-size: 16px; font-weight: 800; }
   .pickbar .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
-  .clock { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
-  @media (max-width: 700px) { .clock { grid-template-columns: repeat(2, 1fr); } }
-  .clockcard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; text-align: center; }
-  .clockcard.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-  .clockcard .cname { font-weight: 800; font-size: 14px; }
-  .clockcard .ccounts { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
-  .clockcard .ccounts b { color: var(--text); }
-  /* Draft — division grid layout */
   .conf-group { margin-bottom: 24px; }
   .conf-header { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .conf-div-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
@@ -101,7 +92,6 @@
   @media (max-width: 500px) { .conf-div-grid { grid-template-columns: 1fr; } }
   .div-col { display: flex; flex-direction: column; gap: 8px; }
   .div-header { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
-  /* Draft — team card */
   .teamcard { display: flex; flex-direction: column; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--tc, #666); border-radius: 10px; padding: 12px; }
   .teamcard-top { display: flex; align-items: center; gap: 10px; }
   .team-logo { width: 40px; height: 40px; object-fit: contain; flex-shrink: 0; }
@@ -114,44 +104,118 @@
   .stat-val { font-size: 12px; font-weight: 800; }
   .teamcard-btns { display: flex; gap: 6px; }
   .teamcard-btns .pickbtn { flex: 1; font-size: 12px; padding: 6px 4px; }
-  /* Draft — pick buttons */
   .pickbtn { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 4px 9px; font-size: 13px; font-weight: 700; cursor: pointer; }
   .pickbtn:disabled { opacity: .3; cursor: default; }
   .pickbtn.t:not(:disabled):hover { border-color: var(--treasure); background: rgba(245,197,66,.1); }
   .pickbtn.tr:not(:disabled):hover { border-color: var(--trash); background: rgba(79,176,255,.1); }
-  /* Draft — roster preview */
   .col.col-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   tr.empty-slot td { color: var(--line); border-left-color: transparent !important; }
   .draft-preview { margin-bottom: 16px; }
-  /* Draft — ESPN status */
   .espn-status { font-size: 12px; color: var(--muted); margin: 8px 0 12px; display: flex; align-items: center; gap: 8px; }
   .espn-status.err { color: var(--pink); }
-  /* Draft — drag order */
-  .draft-order-item { cursor: grab; user-select: none; }
-  .draft-order-item.dragging { opacity: 0.35; }
 
-  /* Edit tab */
   .editgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
   @media (max-width: 700px) { .editgrid { grid-template-columns: 1fr; } }
   input[type=number] { width: 46px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; text-align: center; font-size: 12px; }
   .erow { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; padding: 3px 0; font-size: 12px; }
   .erow .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ehdr { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 10px 0 4px; font-weight: 700; }
+
+  .league-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .text-input { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 14px; width: 100%; }
+  .text-input:focus { outline: none; border-color: var(--accent); }
+  .viewer-banner { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; color: var(--muted); }
+
+  /* Sync status dot */
+  .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); display: inline-block; margin-left: 6px; vertical-align: middle; }
+  .sync-dot.syncing { background: var(--treasure); }
+  .sync-dot.saved   { background: #4ade80; }
+  .sync-dot.error   { background: var(--pink); }
+
+  /* Loading screen */
+  .loading-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 40vh; gap: 16px; color: var(--muted); font-size: 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 </style>
 </head>
 <body>
 <div id="root"></div>
+
+<!-- Firebase compat SDK (safe to use in no-build inline scripts) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+<script>
+  firebase.initializeApp({
+    apiKey: "AIzaSyAp0TE_-Ko6KZn604bk6eUPRLDNxQ7DJL8",
+    authDomain: "trash-treasures-2b85a.firebaseapp.com",
+    projectId: "trash-treasures-2b85a",
+    storageBucket: "trash-treasures-2b85a.firebasestorage.app",
+    messagingSenderId: "647417117578",
+    appId: "1:647417117578:web:6e9f0f6f758f61f4e3a673"
+  });
+</script>
 
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
 <script type="text/jsx-source" id="app-source">
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useRef } = React;
 
-const PLAYERS = ["Natalie", "Kevin", "Vince", "Haley"];
-const STORAGE_KEY = "trash-treasures-v2";
+// ---- Firestore ----
+const db = firebase.firestore();
 
+async function fsLoad(leagueId) {
+  try {
+    const doc = await db.collection("leagues").doc(leagueId).get();
+    return doc.exists ? doc.data() : null;
+  } catch(e) { console.warn("Firestore load:", e); return null; }
+}
+
+async function fsSave(leagueId, st) {
+  try { await db.collection("leagues").doc(leagueId).set(st); }
+  catch(e) { console.warn("Firestore save:", e); throw e; }
+}
+
+function fsSubscribe(leagueId, onData) {
+  return db.collection("leagues").doc(leagueId).onSnapshot(
+    doc => { if (doc.exists) onData(doc.data()); },
+    err => console.warn("Firestore subscription:", err)
+  );
+}
+
+// ---- URL routing ----
+const _params  = new URLSearchParams(window.location.search);
+const LEAGUE_ID = _params.get("league");
+const IS_ADMIN  = _params.get("admin") === "1";
+
+// ---- Local storage (admin cache + league index) ----
+const LEGACY_KEY  = "trash-treasures-v2";
+const LEAGUES_KEY = "trash-treasures-leagues";
+const leagueKey   = id => `tt-league-${id}`;
+const draftKey    = id => `tt-draft-${id}`;
+
+function loadLeagues() {
+  try { const r = localStorage.getItem(LEAGUES_KEY); if (r) return JSON.parse(r); } catch(e) {}
+  return [];
+}
+function saveLeagues(ls) { localStorage.setItem(LEAGUES_KEY, JSON.stringify(ls)); }
+function genId() { return Math.random().toString(36).slice(2, 8); }
+
+function loadLocalState(id) {
+  try { const r = localStorage.getItem(leagueKey(id)); if (r) { const p = JSON.parse(r); if (p.records && p.roster) return p; } } catch(e) {}
+  return null;
+}
+function saveLocalState(id, st) { localStorage.setItem(leagueKey(id), JSON.stringify(st)); }
+
+function emptyState(players) {
+  const roster = {};
+  players.forEach(p => roster[p] = { treasures: { active:[], locked:[] }, trash: { active:[], locked:[] } });
+  return { players, records: {}, roster };
+}
+
+// ---- Team data ----
 const COLORS = {
   "Philadelphia Eagles":"#004C54","Houston Texans":"#03202F","Pittsburgh Steelers":"#FFB612","Seattle Seahawks":"#69BE28",
   "Buffalo Bills":"#00338D","Green Bay Packers":"#203731","Los Angeles Chargers":"#0080C6","Cincinnati Bengals":"#FB4F14",
@@ -162,7 +226,6 @@ const COLORS = {
   "New York Giants":"#0B2265","Dallas Cowboys":"#869397","Tampa Bay Buccaneers":"#D50A0A","Arizona Cardinals":"#97233F",
   "Cleveland Browns":"#FF3C00","Minnesota Vikings":"#4F2683","Chicago Bears":"#0B162A","Kansas City Chiefs":"#E31837"
 };
-
 const TEAM_ABBREV = {
   "Arizona Cardinals":"ari","Atlanta Falcons":"atl","Baltimore Ravens":"bal","Buffalo Bills":"buf",
   "Carolina Panthers":"car","Chicago Bears":"chi","Cincinnati Bengals":"cin","Cleveland Browns":"cle",
@@ -186,8 +249,6 @@ const DIVISIONS = [
   { conf:"NFC", div:"West",  teams:["Arizona Cardinals","Los Angeles Rams","San Francisco 49ers","Seattle Seahawks"] },
 ];
 
-// Fetches the previous NFL regular season standings from ESPN's public API.
-// Returns { teamDisplayName: { w, l, pct, rank } } where rank is overall NFL rank (1–32).
 const ESPN_SEASON = 2025;
 async function fetchTeamData() {
   const url = `https://site.api.espn.com/apis/v2/sports/football/nfl/standings?season=${ESPN_SEASON}&seasontype=2`;
@@ -200,18 +261,17 @@ async function fetchTeamData() {
       const name = entry.team?.displayName;
       if (!name) continue;
       const s = Object.fromEntries((entry.stats || []).map(x => [x.name, x.value]));
-      const abbrev = (entry.team?.abbreviation || '').toLowerCase();
-      all.push({ name, abbrev, w: s.wins ?? 0, l: s.losses ?? 0, pct: s.winPercent ?? 0 });
+      all.push({ name, w: s.wins ?? 0, l: s.losses ?? 0, pct: s.winPercent ?? 0 });
     }
   }
   all.sort((a, b) => b.pct - a.pct || b.w - a.w);
   const result = {};
-  all.forEach((t, i) => { result[t.name] = { w: t.w, l: t.l, pct: t.pct, rank: i + 1, abbrev: t.abbrev }; });
+  all.forEach((t, i) => { result[t.name] = { w: t.w, l: t.l, pct: t.pct, rank: i + 1 }; });
   return result;
 }
 
-// Seed: current records [W, L] for each player's 8 active teams.
-// (Swapped-in teams show partial records, mirroring the sheet.)
+// ---- Seeded data (2024 season — for legacy import) ----
+const SEED_PLAYERS = ["Natalie", "Kevin", "Vince", "Haley"];
 const REC0 = {
   "Philadelphia Eagles":[11,6],"Houston Texans":[6,8],"Pittsburgh Steelers":[10,7],"Seattle Seahawks":[10,7],
   "Buffalo Bills":[12,5],"Green Bay Packers":[9,7],"Los Angeles Chargers":[11,6],"Cincinnati Bengals":[3,3],
@@ -222,8 +282,6 @@ const REC0 = {
   "New York Giants":[4,13],"Dallas Cowboys":[7,10],"Tampa Bay Buccaneers":[6,3],"Arizona Cardinals":[1,10],
   "Cleveland Browns":[5,12],"Minnesota Vikings":[5,3],"Chicago Bears":[11,6],"Kansas City Chiefs":[3,8]
 };
-
-// Roster. active rows: [team, swapTag(null|"wk6"|"wk12")]. locked rows: [team, W, L, window].
 const ROSTER0 = {
   Natalie: {
     treasures: { active: [["Philadelphia Eagles","wk12"],["Houston Texans",null],["Pittsburgh Steelers",null],["Seattle Seahawks","wk12"]],
@@ -250,23 +308,17 @@ const ROSTER0 = {
                  locked: [["San Francisco 49ers",2,2,"Weeks 1-6"],["Jacksonville Jaguars",2,2,"Weeks 7-12"]] },
   },
 };
-
-function freshState() { return { records: JSON.parse(JSON.stringify(REC0)), roster: JSON.parse(JSON.stringify(ROSTER0)) }; }
-function load() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) { const p = JSON.parse(raw); if (p.records && p.roster) return p; }
-  } catch (e) {}
-  return freshState();
+function seededState() {
+  return { players: SEED_PLAYERS, records: JSON.parse(JSON.stringify(REC0)), roster: JSON.parse(JSON.stringify(ROSTER0)) };
 }
 
 // ---- Scoring ----
-const activePts = (team, label, records) => { const r = records[team] || [0,0]; return label === "treasure" ? r[0] : r[1]; };
-const lockedPts = (label, w, l) => (label === "treasure" ? w : l);
+const activePts  = (team, label, records) => { const r = records[team] || [0,0]; return label === "treasure" ? r[0] : r[1]; };
+const lockedPts  = (label, w, l) => label === "treasure" ? w : l;
 function sectionScore(section, label, records) {
   let s = 0;
   section.active.forEach(([t]) => s += activePts(t, label, records));
-  section.locked.forEach(([t, w, l]) => s += lockedPts(label, w, l));
+  section.locked.forEach(([,w,l]) => s += lockedPts(label, w, l));
   return s;
 }
 const winnersScore = (player, st) => sectionScore(st.roster[player].treasures, "treasure", st.records);
@@ -274,74 +326,313 @@ const losersScore  = (player, st) => sectionScore(st.roster[player].trash, "tras
 const totalScore   = (player, st) => winnersScore(player, st) + losersScore(player, st);
 
 // ---- Snake draft ----
-const DRAFT_KEY = "trash-treasures-draft";
-const ROUNDS = 8;             // 4 treasures + 4 trash per player
-const PER_CAT = 4;           // max picks per category per player
-const ALL_TEAMS = Object.keys(COLORS).sort();
+const ROUNDS  = 8;
+const PER_CAT = 4;
 
-// Whose pick is it for a given 0-based overall pick index, snaking each round.
 function snakePlayer(order, pickIndex) {
   const round = Math.floor(pickIndex / order.length);
-  const slot = pickIndex % order.length;
-  const ro = round % 2 === 0 ? order : order.slice().reverse();
+  const slot  = pickIndex % order.length;
+  const ro    = round % 2 === 0 ? order : order.slice().reverse();
   return ro[slot];
 }
-
-// Turn a completed list of picks into a fresh-season state (no swaps/locked rows yet).
-function buildStateFromPicks(picks) {
+function buildStateFromPicks(picks, players) {
   const records = {};
-  const roster = {};
-  PLAYERS.forEach(p => roster[p] = { treasures: { active: [], locked: [] }, trash: { active: [], locked: [] } });
+  const roster  = {};
+  players.forEach(p => roster[p] = { treasures: { active:[], locked:[] }, trash: { active:[], locked:[] } });
   picks.forEach(({ player, team, type }) => {
     records[team] = [0, 0];
     roster[player][type === "treasure" ? "treasures" : "trash"].active.push([team, null]);
   });
-  return { records, roster };
+  return { players, records, roster };
 }
-
-function loadDraft() {
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (raw) { const p = JSON.parse(raw); if (p && Array.isArray(p.order) && Array.isArray(p.picks)) return p; }
-  } catch (e) {}
+function loadDraft(leagueId) {
+  try { const r = localStorage.getItem(draftKey(leagueId)); if (r) { const p = JSON.parse(r); if (p && Array.isArray(p.order) && Array.isArray(p.picks)) return p; } } catch(e) {}
   return null;
 }
 
-// ---- App ----
-function App() {
-  const [st, setSt] = useState(load);
-  const [tab, setTab] = useState("dashboard");
-  useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(st)); }, [st]);
+// ========== Root ==========
+function Root() {
+  if (!LEAGUE_ID) return <LeagueHome />;
+  return <LeagueApp />;
+}
 
-  const ranking = useMemo(() => {
-    const totals = {}; PLAYERS.forEach(p => totals[p] = totalScore(p, st));
-    const order = [...PLAYERS].sort((a, b) => totals[b] - totals[a]);
-    const rank = {}; order.forEach((p, i) => rank[p] = i + 1);
-    return { totals, rank, order };
-  }, [st]);
+// ========== League Home ==========
+function LeagueHome() {
+  const [leagues, setLeagues] = useState(loadLeagues);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newPlayers, setNewPlayers] = useState(["","","",""]);
+  const [copied, setCopied] = useState(null);
+  const hasLegacy = !!localStorage.getItem(LEGACY_KEY) && !leagues.some(l => l.legacy);
 
-  function reset() { if (confirm("Reset the whole board back to the seeded data?")) setSt(freshState()); }
-  function commitSeason(newState) { setSt(newState); setTab("dashboard"); }
+  async function create() {
+    const name    = newName.trim();
+    const players = newPlayers.map(p => p.trim()).filter(Boolean);
+    if (!name || players.length !== 4) return;
+    const id      = genId();
+    const entry   = { id, name, players, createdAt: Date.now() };
+    const st      = emptyState(players);
+    const updated = [...leagues, entry];
+    saveLeagues(updated);
+    saveLocalState(id, st);
+    await fsSave(id, st).catch(() => {});
+    window.location.href = `?league=${id}&admin=1`;
+  }
+
+  async function importLegacy() {
+    try {
+      const raw = localStorage.getItem(LEGACY_KEY);
+      const st  = JSON.parse(raw);
+      if (!st.records || !st.roster) return;
+      const players = Object.keys(st.roster);
+      const id      = genId();
+      const stWithPlayers = { ...st, players };
+      const entry   = { id, name: "Trash & Treasures 2024", players, createdAt: Date.now(), legacy: true };
+      const updated = [...leagues, entry];
+      saveLeagues(updated);
+      saveLocalState(id, stWithPlayers);
+      await fsSave(id, stWithPlayers).catch(() => {});
+      window.location.href = `?league=${id}&admin=1`;
+    } catch(e) { alert("Import failed: " + e.message); }
+  }
+
+  function copyViewerLink(id) {
+    const url = `${window.location.origin}${window.location.pathname}?league=${id}`;
+    navigator.clipboard.writeText(url).then(() => { setCopied(id); setTimeout(() => setCopied(null), 2000); });
+  }
+
+  function deleteLeague(id, name) {
+    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    localStorage.removeItem(leagueKey(id));
+    localStorage.removeItem(draftKey(id));
+    db.collection("leagues").doc(id).delete().catch(() => {});
+    const updated = leagues.filter(l => l.id !== id);
+    saveLeagues(updated);
+    setLeagues(updated);
+  }
 
   return (
     <div>
-      <div className="row between">
+      <div style={{ marginBottom: 28 }}>
+        <h1>🗑️ Trash &amp; 💎 Treasures</h1>
+        <div className="sub">Your leagues</div>
+      </div>
+
+      {hasLegacy && (
+        <div className="panel" style={{ marginBottom: 16, borderColor: "var(--accent)" }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Found existing season data</div>
+          <div className="sub" style={{ marginBottom: 12 }}>Import your 2024 season into the new multi-league system.</div>
+          <button className="btn" onClick={importLegacy}>Import 2024 season →</button>
+        </div>
+      )}
+
+      {leagues.length === 0 && !hasLegacy && (
+        <div className="sub" style={{ marginBottom: 20 }}>No leagues yet. Create one to get started.</div>
+      )}
+
+      {leagues.map(l => (
+        <div className="panel" key={l.id} style={{ marginBottom: 10 }}>
+          <div className="league-card">
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 16 }}>{l.name}</div>
+              <div className="sub">{l.players.join(" · ")}</div>
+            </div>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <button className="btn ghost" onClick={() => copyViewerLink(l.id)}>
+                {copied === l.id ? "✓ Copied!" : "Copy viewer link"}
+              </button>
+              <button className="btn ghost" style={{ color: "var(--pink)", borderColor: "rgba(255,126,182,.3)" }} onClick={() => deleteLeague(l.id, l.name)}>Delete</button>
+              <button className="btn" onClick={() => window.location.href = `?league=${l.id}&admin=1`}>Open →</button>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      <div style={{ marginTop: 20 }}>
+        {!creating ? (
+          <button className="btn" onClick={() => setCreating(true)}>+ New league</button>
+        ) : (
+          <div className="panel" style={{ maxWidth: 480 }}>
+            <h2 style={{ marginBottom: 14 }}>New League</h2>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 4 }}>LEAGUE NAME</label>
+              <input className="text-input" value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Rollins League 2025" />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 4 }}>PLAYERS (4)</label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {newPlayers.map((p, i) => (
+                  <input key={i} className="text-input" value={p}
+                    onChange={e => { const a = [...newPlayers]; a[i] = e.target.value; setNewPlayers(a); }}
+                    placeholder={`Player ${i + 1}`} />
+                ))}
+              </div>
+            </div>
+            <div className="row" style={{ gap: 8 }}>
+              <button className="btn" onClick={create} disabled={!newName.trim() || newPlayers.filter(p => p.trim()).length !== 4}>
+                Create league →
+              </button>
+              <button className="btn ghost" onClick={() => { setCreating(false); setNewName(""); setNewPlayers(["","","",""]); }}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ========== League App (async loader + Firestore bridge) ==========
+function LeagueApp() {
+  // Admins get an instant render from localStorage cache, then Firestore sync kicks in.
+  // Viewers wait for the first Firestore snapshot.
+  const [initState, setInitState]     = useState(() => IS_ADMIN ? loadLocalState(LEAGUE_ID) : null);
+  const [remoteUpdate, setRemoteUpdate] = useState(null);
+  const [loading, setLoading]         = useState(IS_ADMIN ? false : true);
+  const [notFound, setNotFound]       = useState(false);
+
+  useEffect(() => {
+    if (!IS_ADMIN) {
+      // Viewer: real-time subscription — updates push straight to the dashboard
+      let initialized = false;
+      const unsub = fsSubscribe(LEAGUE_ID, data => {
+        if (!initialized) { setInitState(data); initialized = true; setLoading(false); }
+        else setRemoteUpdate(data);
+      });
+      // If Firestore never responds after 10s, show "no data" instead of spinner forever
+      const timeout = setTimeout(() => { if (!initialized) setLoading(false); }, 10000);
+      return () => { unsub(); clearTimeout(timeout); };
+    } else {
+      // Admin: fetch latest from Firestore in the background.
+      // If on a new device with no localStorage cache, this is the primary load.
+      fsLoad(LEAGUE_ID).then(remote => {
+        if (remote) {
+          saveLocalState(LEAGUE_ID, remote);
+          if (!initState) setInitState(remote);
+          else setRemoteUpdate(remote); // sync newer cloud state into running app
+        } else if (!initState) {
+          setNotFound(true);
+        }
+        setLoading(false);
+      }).catch(() => setLoading(false));
+    }
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="loading-screen">
+        <div className="spinner" />
+        <div>{IS_ADMIN ? "Loading league…" : "Connecting to league…"}</div>
+      </div>
+    );
+  }
+
+  if (!initState || notFound) {
+    return IS_ADMIN
+      ? <div style={{padding:40,color:"var(--muted)"}}>League not found. <a href={window.location.pathname} style={{color:"var(--accent)"}}>← Back to leagues</a></div>
+      : (
+        <div style={{ maxWidth: 480, margin: "60px auto", textAlign: "center" }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>🔄</div>
+          <h2 style={{ margin: "0 0 8px" }}>No data yet</h2>
+          <div className="sub">The league admin hasn't published any scores yet. Check back once they update the board.</div>
+          <div style={{ marginTop: 24, fontSize: 12, color: "var(--line)" }}>League ID: {LEAGUE_ID}</div>
+        </div>
+      );
+  }
+
+  const leagueInfo = loadLeagues().find(l => l.id === LEAGUE_ID);
+  return <App initState={initState} leagueInfo={leagueInfo} remoteUpdate={remoteUpdate} />;
+}
+
+// ========== App ==========
+function App({ initState, leagueInfo, remoteUpdate }) {
+  const [st, setSt]       = useState(initState);
+  const [tab, setTab]     = useState("dashboard");
+  const [syncStatus, setSyncStatus] = useState("saved"); // "saved" | "syncing" | "error"
+
+  // Apply real-time updates from Firestore (viewer live updates, admin multi-device sync)
+  useEffect(() => {
+    if (remoteUpdate) setSt(remoteUpdate);
+  }, [remoteUpdate]);
+
+  // Admin: save to localStorage immediately, Firestore with 1s debounce
+  useEffect(() => {
+    if (!IS_ADMIN) return;
+    saveLocalState(LEAGUE_ID, st);
+    setSyncStatus("syncing");
+    const t = setTimeout(() => {
+      fsSave(LEAGUE_ID, st)
+        .then(() => setSyncStatus("saved"))
+        .catch(() => setSyncStatus("error"));
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [st]);
+
+  const players = st.players || SEED_PLAYERS;
+
+  const ranking = useMemo(() => {
+    const totals = {};
+    players.forEach(p => totals[p] = totalScore(p, st));
+    const order = [...players].sort((a, b) => totals[b] - totals[a]);
+    const rank  = {};
+    order.forEach((p, i) => rank[p] = i + 1);
+    return { totals, rank, order };
+  }, [st, players]);
+
+  function resetScores() {
+    if (!confirm("Reset all W/L records to zero? Keeps the roster intact.")) return;
+    const records = {};
+    Object.keys(st.records).forEach(t => records[t] = [0, 0]);
+    setSt(s => ({ ...s, records }));
+  }
+
+  function commitSeason(newState) { setSt(newState); setTab("dashboard"); }
+
+  const [copied, setCopied] = useState(false);
+  const viewerUrl = `${window.location.origin}${window.location.pathname}?league=${LEAGUE_ID}`;
+  function copyViewer() {
+    navigator.clipboard.writeText(viewerUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  }
+
+  const leagueName = leagueInfo?.name || "Trash & Treasures";
+
+  const syncLabel = { saved: "Saved", syncing: "Saving…", error: "Sync error" }[syncStatus];
+  const syncClass = { saved: "saved", syncing: "syncing", error: "error" }[syncStatus];
+
+  return (
+    <div>
+      <div className="row between" style={{ flexWrap: "wrap", gap: 10 }}>
         <div>
           <h1>🗑️ Trash &amp; 💎 Treasures</h1>
-          <div className="sub">Treasures score their wins · Trash score their losses · swapped picks bank locked points</div>
+          <div className="sub">
+            {leagueName}
+            {IS_ADMIN && (
+              <span title={syncLabel}>
+                <span className={"sync-dot " + syncClass} />
+                <span style={{ fontSize: 11, marginLeft: 4, color: "var(--muted)" }}>{syncLabel}</span>
+              </span>
+            )}
+          </div>
         </div>
-        <button className="btn ghost" onClick={reset}>Reset</button>
+        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          {IS_ADMIN && <>
+            <button className="btn ghost" onClick={copyViewer}>{copied ? "✓ Copied!" : "Share viewer link 🔗"}</button>
+            <button className="btn ghost" onClick={resetScores}>Reset scores</button>
+          </>}
+          <button className="btn ghost" style={{ fontSize: 12 }} onClick={() => window.location.href = window.location.pathname}>← Leagues</button>
+        </div>
       </div>
+
+      {!IS_ADMIN && <div className="viewer-banner">👀 View-only — scores update live when the admin makes changes.</div>}
 
       <div className="tabs">
         <button className={"tab" + (tab === "dashboard" ? " active" : "")} onClick={() => setTab("dashboard")}>Dashboard</button>
-        <button className={"tab" + (tab === "edit" ? " active" : "")} onClick={() => setTab("edit")}>Edit</button>
-        <button className={"tab" + (tab === "draft" ? " active" : "")} onClick={() => setTab("draft")}>Draft</button>
+        {IS_ADMIN && <button className={"tab" + (tab === "edit" ? " active" : "")} onClick={() => setTab("edit")}>Edit</button>}
+        {IS_ADMIN && <button className={"tab" + (tab === "draft" ? " active" : "")} onClick={() => setTab("draft")}>Draft</button>}
       </div>
 
-      {tab === "dashboard" ? <Dashboard st={st} ranking={ranking} />
-        : tab === "edit" ? <Edit st={st} setSt={setSt} />
-        : <Draft commitSeason={commitSeason} />}
+      {tab === "dashboard" ? <Dashboard st={st} ranking={ranking} players={players} />
+        : tab === "edit"   ? <Edit st={st} setSt={setSt} players={players} />
+        : <Draft commitSeason={commitSeason} players={players} leagueId={LEAGUE_ID} />}
     </div>
   );
 }
@@ -359,7 +650,9 @@ function Section({ section, label, records }) {
             const r = records[team] || [0,0];
             return (
               <tr key={"a"+i} className={swap === "wk6" ? "swap-wk6" : swap === "wk12" ? "swap-wk12" : ""}>
-                <td className="tm" style={{ ["--tc"]: COLORS[team] || "#666" }} title={team}>{TEAM_ABBREV[team] && <img className="team-logo-sm" src={teamLogo(team)} alt="" />}{team}</td>
+                <td className="tm" style={{ ["--tc"]: COLORS[team] || "#666" }} title={team}>
+                  {TEAM_ABBREV[team] && <img className="team-logo-sm" src={teamLogo(team)} alt="" />}{team}
+                </td>
                 <td>{r[0]}</td><td>{r[1]}</td>
                 <td className="pts">{activePts(team, label, records)}</td>
               </tr>
@@ -369,7 +662,9 @@ function Section({ section, label, records }) {
             <React.Fragment key={"l"+i}>
               <tr className="lockrow"><td colSpan="4">🔒 {win} performance (locked)</td></tr>
               <tr className="locked">
-                <td className="tm" title={team}>{TEAM_ABBREV[team] && <img className="team-logo-sm" src={teamLogo(team)} alt="" />}{team}</td>
+                <td className="tm" title={team}>
+                  {TEAM_ABBREV[team] && <img className="team-logo-sm" src={teamLogo(team)} alt="" />}{team}
+                </td>
                 <td>{w}</td><td>{l}</td>
                 <td className="pts">{lockedPts(label, w, l)}</td>
               </tr>
@@ -381,12 +676,13 @@ function Section({ section, label, records }) {
   );
 }
 
-function Dashboard({ st, ranking }) {
+function Dashboard({ st, ranking, players }) {
   return (
     <div>
       <div className="dash">
-        {PLAYERS.map(p => {
+        {players.map(p => {
           const data = st.roster[p];
+          if (!data) return null;
           const rank = ranking.rank[p];
           return (
             <div className="col" key={p}>
@@ -401,7 +697,6 @@ function Dashboard({ st, ranking }) {
           );
         })}
       </div>
-
       <div className="bottom">
         <div className="panel">
           <h2>Standings</h2>
@@ -424,15 +719,14 @@ function Dashboard({ st, ranking }) {
           <h2>Legend</h2>
           <div className="legend-item"><span className="swatch pink"></span> Team swapped in after Weeks 1-6</div>
           <div className="legend-item"><span className="swatch teal"></span> Team swapped in after Weeks 7-12</div>
-          <div className="sub" style={{ marginTop: 8 }}>Greyed “locked” rows are the original picks’ banked performance from that window — they still count toward the total.</div>
+          <div className="sub" style={{ marginTop: 8 }}>Greyed "locked" rows are the original picks' banked performance — they still count toward the total.</div>
         </div>
       </div>
     </div>
   );
 }
 
-// ---- Edit ----
-function Edit({ st, setSt }) {
+function Edit({ st, setSt, players }) {
   function setRec(team, idx, val) {
     const n = Math.max(0, Math.min(20, parseInt(val, 10) || 0));
     setSt(s => ({ ...s, records: { ...s.records, [team]: idx === 0 ? [n, (s.records[team]||[0,0])[1]] : [(s.records[team]||[0,0])[0], n] } }));
@@ -441,45 +735,48 @@ function Edit({ st, setSt }) {
     const n = Math.max(0, Math.min(20, parseInt(val, 10) || 0));
     setSt(s => {
       const roster = JSON.parse(JSON.stringify(s.roster));
-      roster[player][sec].locked[rowIdx][field] = n; // field 1 = W, 2 = L
+      roster[player][sec].locked[rowIdx][field] = n;
       return { ...s, roster };
     });
   }
   return (
     <div>
-      <div className="sub" style={{ marginBottom: 14 }}>Update active team records each week (W / L). Treasures score wins, Trash score losses. Locked rows are the banked swap history — edit only if you need to correct it.</div>
+      <div className="sub" style={{ marginBottom: 14 }}>Update active team records each week. Locked rows are banked swap history — edit only to correct.</div>
       <div className="editgrid">
-        {PLAYERS.map(p => (
-          <div className="panel" key={p}>
-            <h2 style={{ marginBottom: 4 }}>{p}</h2>
-            {["treasures", "trash"].map(sec => {
-              const label = sec === "treasures" ? "treasure" : "trash";
-              return (
-                <div key={sec}>
-                  <div className={"sec-head " + label} style={{ padding: "8px 0 2px" }}>{sec === "treasures" ? "💎 Treasures" : "🗑️ Trash"}</div>
-                  {st.roster[p][sec].active.map(([team], i) => {
-                    const r = st.records[team] || [0,0];
-                    return (
-                      <div className="erow" key={i}>
-                        <span className="lbl" title={team}>{team}</span>
-                        <input type="number" value={r[0]} onChange={e => setRec(team, 0, e.target.value)} title="Wins" />
-                        <input type="number" value={r[1]} onChange={e => setRec(team, 1, e.target.value)} title="Losses" />
+        {players.map(p => {
+          if (!st.roster[p]) return null;
+          return (
+            <div className="panel" key={p}>
+              <h2 style={{ marginBottom: 4 }}>{p}</h2>
+              {["treasures","trash"].map(sec => {
+                const label = sec === "treasures" ? "treasure" : "trash";
+                return (
+                  <div key={sec}>
+                    <div className={"sec-head " + label} style={{ padding: "8px 0 2px" }}>{sec === "treasures" ? "💎 Treasures" : "🗑️ Trash"}</div>
+                    {st.roster[p][sec].active.map(([team], i) => {
+                      const r = st.records[team] || [0,0];
+                      return (
+                        <div className="erow" key={i}>
+                          <span className="lbl" title={team}>{team}</span>
+                          <input type="number" value={r[0]} onChange={e => setRec(team, 0, e.target.value)} title="Wins" />
+                          <input type="number" value={r[1]} onChange={e => setRec(team, 1, e.target.value)} title="Losses" />
+                        </div>
+                      );
+                    })}
+                    <div className="ehdr">Locked (banked)</div>
+                    {st.roster[p][sec].locked.map(([team, w, l, win], i) => (
+                      <div className="erow" key={"L"+i}>
+                        <span className="lbl" title={team}>{team} · {win}</span>
+                        <input type="number" value={w} onChange={e => setLocked(p, sec, i, 1, e.target.value)} title="Wins" />
+                        <input type="number" value={l} onChange={e => setLocked(p, sec, i, 2, e.target.value)} title="Losses" />
                       </div>
-                    );
-                  })}
-                  <div className="ehdr">Locked (banked)</div>
-                  {st.roster[p][sec].locked.map(([team, w, l, win], i) => (
-                    <div className="erow" key={"L"+i}>
-                      <span className="lbl" title={team}>{team} · {win}</span>
-                      <input type="number" value={w} onChange={e => setLocked(p, sec, i, 1, e.target.value)} title="Wins" />
-                      <input type="number" value={l} onChange={e => setLocked(p, sec, i, 2, e.target.value)} title="Losses" />
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        ))}
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -499,7 +796,7 @@ function DraftRosterPreview({ picks, order, current }) {
               {Array.from({ length: PER_CAT }).map((_, i) => {
                 const pk = treasures[i];
                 return pk
-                  ? <tr key={i}><td className="tm" style={{ ["--tc"]: COLORS[pk.team] || "#666" }} title={pk.team}>{TEAM_ABBREV[pk.team] && <img className="team-logo-sm" src={teamLogo(pk.team)} alt="" />}{pk.team}</td></tr>
+                  ? <tr key={i}><td className="tm" style={{ ["--tc"]: COLORS[pk.team]||"#666" }} title={pk.team}>{TEAM_ABBREV[pk.team] && <img className="team-logo-sm" src={teamLogo(pk.team)} alt="" />}{pk.team}</td></tr>
                   : <tr key={i} className="empty-slot"><td className="tm">—</td></tr>;
               })}
             </tbody></table>
@@ -508,7 +805,7 @@ function DraftRosterPreview({ picks, order, current }) {
               {Array.from({ length: PER_CAT }).map((_, i) => {
                 const pk = trash[i];
                 return pk
-                  ? <tr key={i}><td className="tm" style={{ ["--tc"]: COLORS[pk.team] || "#666" }} title={pk.team}>{TEAM_ABBREV[pk.team] && <img className="team-logo-sm" src={teamLogo(pk.team)} alt="" />}{pk.team}</td></tr>
+                  ? <tr key={i}><td className="tm" style={{ ["--tc"]: COLORS[pk.team]||"#666" }} title={pk.team}>{TEAM_ABBREV[pk.team] && <img className="team-logo-sm" src={teamLogo(pk.team)} alt="" />}{pk.team}</td></tr>
                   : <tr key={i} className="empty-slot"><td className="tm">—</td></tr>;
               })}
             </tbody></table>
@@ -519,16 +816,15 @@ function DraftRosterPreview({ picks, order, current }) {
   );
 }
 
-// ---- Draft ----
-function Draft({ commitSeason }) {
-  const [draft, setDraft] = useState(() => loadDraft() || { phase: "order", order: [...PLAYERS], picks: [] });
+function Draft({ commitSeason, players, leagueId }) {
+  const [draft, setDraft] = useState(() => loadDraft(leagueId) || { phase: "order", order: [...players], picks: [] });
   const [teamData, setTeamData] = useState(null);
   const [tdLoading, setTdLoading] = useState(true);
   const [tdError, setTdError] = useState(null);
   const [dragPlayer, setDragPlayer] = useState(null);
-  const dragFromIdx = React.useRef(null);
+  const dragFromIdx = useRef(null);
 
-  useEffect(() => { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); }, [draft]);
+  useEffect(() => { localStorage.setItem(draftKey(leagueId), JSON.stringify(draft)); }, [draft, leagueId]);
 
   function loadESPN() {
     setTdLoading(true); setTdError(null);
@@ -538,173 +834,142 @@ function Draft({ commitSeason }) {
   }
   useEffect(loadESPN, []);
 
-  const totalPicks = ROUNDS * PLAYERS.length;
-  const taken = useMemo(() => new Set(draft.picks.map(p => p.team)), [draft.picks]);
+  const totalPicks = ROUNDS * players.length;
+  const taken  = useMemo(() => new Set(draft.picks.map(p => p.team)), [draft.picks]);
   const counts = useMemo(() => {
-    const c = {}; PLAYERS.forEach(p => c[p] = { treasure: 0, trash: 0 });
+    const c = {}; players.forEach(p => c[p] = { treasure:0, trash:0 });
     draft.picks.forEach(({ player, type }) => c[player][type]++);
     return c;
-  }, [draft.picks]);
+  }, [draft.picks, players]);
 
   const pickIndex = draft.picks.length;
-  const current = pickIndex < totalPicks ? snakePlayer(draft.order, pickIndex) : null;
-  const round = Math.floor(pickIndex / PLAYERS.length) + 1;
+  const current   = pickIndex < totalPicks ? snakePlayer(draft.order, pickIndex) : null;
+  const round     = Math.floor(pickIndex / players.length) + 1;
 
-  // order phase
   function move(i, dir) {
-    setDraft(d => { const o = [...d.order]; const j = i + dir; if (j < 0 || j >= o.length) return d; [o[i], o[j]] = [o[j], o[i]]; return { ...d, order: o }; });
+    setDraft(d => { const o=[...d.order]; const j=i+dir; if(j<0||j>=o.length) return d; [o[i],o[j]]=[o[j],o[i]]; return {...d,order:o}; });
   }
   function randomize() {
-    setDraft(d => { const o = [...d.order]; for (let i = o.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; } return { ...d, order: o }; });
+    setDraft(d => { const o=[...d.order]; for(let i=o.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[o[i],o[j]]=[o[j],o[i]];} return {...d,order:o}; });
   }
-  function startDraft() { setDraft(d => ({ ...d, phase: "draft" })); }
-
-  // drag-and-drop order
-  function onDragStart(e, p, i) { dragFromIdx.current = i; setDragPlayer(p); e.dataTransfer.effectAllowed = "move"; }
-  function onDragOver(e, i) {
-    e.preventDefault();
-    const from = dragFromIdx.current;
-    if (from === null || from === i) return;
-    setDraft(d => { const o = [...d.order]; const [item] = o.splice(from, 1); o.splice(i, 0, item); return { ...d, order: o }; });
-    dragFromIdx.current = i;
+  function startDraft() { setDraft(d => ({...d, phase:"draft"})); }
+  function onDragStart(e,p,i) { dragFromIdx.current=i; setDragPlayer(p); e.dataTransfer.effectAllowed="move"; }
+  function onDragOver(e,i) {
+    e.preventDefault(); const from=dragFromIdx.current;
+    if(from===null||from===i) return;
+    setDraft(d => { const o=[...d.order]; const [item]=o.splice(from,1); o.splice(i,0,item); return {...d,order:o}; });
+    dragFromIdx.current=i;
   }
-  function onDragEnd() { dragFromIdx.current = null; setDragPlayer(null); }
-
-  // draft phase
+  function onDragEnd() { dragFromIdx.current=null; setDragPlayer(null); }
   function pick(team, type) {
     setDraft(d => {
-      const idx = d.picks.length;
-      if (idx >= totalPicks) return d;
-      const cur = snakePlayer(d.order, idx);
-      const used = d.picks.filter(p => p.player === cur && p.type === type).length;
-      if (used >= PER_CAT) return d;
-      const picks = [...d.picks, { player: cur, team, type, round: Math.floor(idx / PLAYERS.length) + 1 }];
-      return { ...d, picks, phase: picks.length >= totalPicks ? "review" : "draft" };
+      const idx=d.picks.length; if(idx>=totalPicks) return d;
+      const cur=snakePlayer(d.order,idx);
+      if(d.picks.filter(p=>p.player===cur&&p.type===type).length>=PER_CAT) return d;
+      const picks=[...d.picks,{player:cur,team,type,round:Math.floor(idx/players.length)+1}];
+      return {...d,picks,phase:picks.length>=totalPicks?"review":"draft"};
     });
   }
-  function undo() { setDraft(d => d.picks.length ? { ...d, picks: d.picks.slice(0, -1), phase: "draft" } : d); }
-  function restart() { if (confirm("Clear this draft and start over?")) setDraft({ phase: "order", order: [...PLAYERS], picks: [] }); }
+  function undo() { setDraft(d => d.picks.length ? {...d,picks:d.picks.slice(0,-1),phase:"draft"} : d); }
+  function restart() { if(confirm("Clear this draft and start over?")) setDraft({phase:"order",order:[...players],picks:[]}); }
   function finish() {
-    if (!confirm("Start the season with this draft? This replaces the current board.")) return;
-    localStorage.removeItem(DRAFT_KEY);
-    commitSeason(buildStateFromPicks(draft.picks));
+    if(!confirm("Start the season with this draft? This replaces the current board.")) return;
+    localStorage.removeItem(draftKey(leagueId));
+    commitSeason(buildStateFromPicks(draft.picks, players));
   }
 
-  if (draft.phase === "order") {
-    return (
-      <div>
-        <div className="sub" style={{ marginBottom: 8 }}>Drag to reorder, then snake-draft 4 💎 Treasures and 4 🗑️ Trash per player — 8 rounds, every NFL team goes exactly once.</div>
-        {tdLoading && <div className="espn-status">⏳ Loading {ESPN_SEASON} standings from ESPN…</div>}
-        {tdError && <div className="espn-status err">⚠️ ESPN load failed: {tdError} <button className="btn ghost" style={{marginLeft:8,padding:"3px 10px"}} onClick={loadESPN}>Retry</button></div>}
-        {teamData && <div className="espn-status">✓ {ESPN_SEASON} standings loaded</div>}
-        <button className="btn ghost" onClick={randomize} style={{ marginBottom: 12 }}>🎲 Randomize order</button>
-        <div className="draft-order-list">
-          {draft.order.map((p, i) => (
-            <div
-              className={"draft-order-item" + (dragPlayer === p ? " dragging" : "")}
-              key={p}
-              draggable
-              onDragStart={e => onDragStart(e, p, i)}
-              onDragOver={e => onDragOver(e, i)}
-              onDragEnd={onDragEnd}
-            >
-              <span className="num">{i + 1}</span>
-              <span className="nm">{p}</span>
-              <button className="iconbtn" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
-              <button className="iconbtn" disabled={i === draft.order.length - 1} onClick={() => move(i, 1)}>↓</button>
-            </div>
-          ))}
-        </div>
-        <button className="btn" onClick={startDraft} disabled={tdLoading}>Start draft →</button>
+  if (draft.phase === "order") return (
+    <div>
+      <div className="sub" style={{marginBottom:8}}>Drag to reorder, then snake-draft 4 💎 Treasures and 4 🗑️ Trash per player — 8 rounds total.</div>
+      {tdLoading && <div className="espn-status">⏳ Loading {ESPN_SEASON} standings from ESPN…</div>}
+      {tdError && <div className="espn-status err">⚠️ ESPN load failed: {tdError} <button className="btn ghost" style={{marginLeft:8,padding:"3px 10px"}} onClick={loadESPN}>Retry</button></div>}
+      {teamData && <div className="espn-status">✓ {ESPN_SEASON} standings loaded</div>}
+      <button className="btn ghost" onClick={randomize} style={{marginBottom:12}}>🎲 Randomize order</button>
+      <div className="draft-order-list">
+        {draft.order.map((p,i) => (
+          <div className={"draft-order-item"+(dragPlayer===p?" dragging":"")} key={p} draggable
+            onDragStart={e=>onDragStart(e,p,i)} onDragOver={e=>onDragOver(e,i)} onDragEnd={onDragEnd}>
+            <span className="num">{i+1}</span><span className="nm">{p}</span>
+            <button className="iconbtn" disabled={i===0} onClick={()=>move(i,-1)}>↑</button>
+            <button className="iconbtn" disabled={i===draft.order.length-1} onClick={()=>move(i,1)}>↓</button>
+          </div>
+        ))}
       </div>
-    );
-  }
+      <button className="btn" onClick={startDraft} disabled={tdLoading}>Start draft →</button>
+    </div>
+  );
 
-  if (draft.phase === "review") {
-    return (
-      <div>
-        <div className="pickbar">
-          <div>
-            <div className="who">✅ Draft complete</div>
-            <div className="meta">Review the rosters, then start the season.</div>
-          </div>
-          <div className="row" style={{ gap: 8 }}>
-            <button className="btn ghost" onClick={undo}>↩ Undo last</button>
-            <button className="btn ghost" onClick={restart}>Restart</button>
-            <button className="btn" onClick={finish}>Start season →</button>
-          </div>
-        </div>
-        <div className="dash">
-          {PLAYERS.map(p => (
-            <div className="col" key={p}>
-              <div className="col-head">{p}</div>
-              {[["treasure", "💎 Treasures"], ["trash", "🗑️ Trash"]].map(([type, title]) => (
-                <React.Fragment key={type}>
-                  <div className={"sec-head " + type}>{title}</div>
-                  <table className="tt"><tbody>
-                    {draft.picks.filter(x => x.player === p && x.type === type).map((x, i) => (
-                      <tr key={i}><td className="tm" style={{ ["--tc"]: COLORS[x.team] || "#666" }} title={x.team}>{TEAM_ABBREV[x.team] && <img className="team-logo-sm" src={teamLogo(x.team)} alt="" />}{x.team}</td></tr>
-                    ))}
-                  </tbody></table>
-                </React.Fragment>
-              ))}
-            </div>
-          ))}
+  if (draft.phase === "review") return (
+    <div>
+      <div className="pickbar">
+        <div><div className="who">✅ Draft complete</div><div className="meta">Review the rosters, then start the season.</div></div>
+        <div className="row" style={{gap:8}}>
+          <button className="btn ghost" onClick={undo}>↩ Undo last</button>
+          <button className="btn ghost" onClick={restart}>Restart</button>
+          <button className="btn" onClick={finish}>Start season →</button>
         </div>
       </div>
-    );
-  }
+      <div className="dash">
+        {players.map(p => (
+          <div className="col" key={p}>
+            <div className="col-head">{p}</div>
+            {[["treasure","💎 Treasures"],["trash","🗑️ Trash"]].map(([type,title]) => (
+              <React.Fragment key={type}>
+                <div className={"sec-head "+type}>{title}</div>
+                <table className="tt"><tbody>
+                  {draft.picks.filter(x=>x.player===p&&x.type===type).map((x,i)=>(
+                    <tr key={i}><td className="tm" style={{["--tc"]:COLORS[x.team]||"#666"}} title={x.team}>{TEAM_ABBREV[x.team]&&<img className="team-logo-sm" src={teamLogo(x.team)} alt=""/>}{x.team}</td></tr>
+                  ))}
+                </tbody></table>
+              </React.Fragment>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
-  // draft phase
   return (
     <div>
       <div className="pickbar">
-        <div>
-          <div className="who">🟢 {current} on the clock</div>
-          <div className="meta">Round {round} of {ROUNDS} · Pick {pickIndex + 1} of {totalPicks} · pick 💎 Treasure or 🗑️ Trash</div>
-        </div>
-        <div className="row" style={{ gap: 8 }}>
+        <div><div className="who">🟢 {current} on the clock</div><div className="meta">Round {round} of {ROUNDS} · Pick {pickIndex+1} of {totalPicks} · pick 💎 Treasure or 🗑️ Trash</div></div>
+        <div className="row" style={{gap:8}}>
           <button className="btn ghost" onClick={undo} disabled={!draft.picks.length}>↩ Undo</button>
           <button className="btn ghost" onClick={restart}>Restart</button>
         </div>
       </div>
       <DraftRosterPreview picks={draft.picks} order={draft.order} current={current} />
       {["AFC","NFC"].map(conf => {
-        const confDivs = DIVISIONS.filter(d => d.conf === conf);
-        const anyAvail = confDivs.some(d => d.teams.some(t => !taken.has(t)));
-        if (!anyAvail) return null;
+        const confDivs = DIVISIONS.filter(d=>d.conf===conf);
+        if (!confDivs.some(d=>d.teams.some(t=>!taken.has(t)))) return null;
         return (
           <div className="conf-group" key={conf}>
             <div className="conf-header">{conf}</div>
             <div className="conf-div-grid">
-              {confDivs.map(({ div, teams }) => {
-                const avail = teams
-                  .filter(t => !taken.has(t))
-                  .sort((a, b) => (teamData?.[a]?.rank ?? 99) - (teamData?.[b]?.rank ?? 99));
+              {confDivs.map(({div,teams}) => {
+                const avail = teams.filter(t=>!taken.has(t)).sort((a,b)=>(teamData?.[a]?.rank??99)-(teamData?.[b]?.rank??99));
                 return (
                   <div className="div-col" key={div}>
                     <div className="div-header">{div}</div>
                     {avail.map(t => {
-                      const td = teamData?.[t];
+                      const td=teamData?.[t];
                       return (
-                        <div className="teamcard" key={t} style={{ ["--tc"]: COLORS[t] || "#666" }}>
+                        <div className="teamcard" key={t} style={{["--tc"]:COLORS[t]||"#666"}}>
                           <div className="teamcard-top">
                             <img className="team-logo" src={teamLogo(t)} alt="" />
                             <div className="team-info">
                               <span className="tnm" title={t}>{t}</span>
-                              {td && (
-                                <div className="team-stats">
-                                  <div className="stat-item"><span className="stat-label">Wins</span><span className="stat-val">{td.w}</span></div>
-                                  <div className="stat-item"><span className="stat-label">Losses</span><span className="stat-val">{td.l}</span></div>
-                                  <div className="stat-item"><span className="stat-label">PCT</span><span className="stat-val">{td.pct.toFixed(3).replace(/^0/, "")}</span></div>
-                                  <div className="stat-item"><span className="stat-label">Rank</span><span className="stat-val">#{td.rank}</span></div>
-                                </div>
-                              )}
+                              {td && <div className="team-stats">
+                                <div className="stat-item"><span className="stat-label">Wins</span><span className="stat-val">{td.w}</span></div>
+                                <div className="stat-item"><span className="stat-label">Losses</span><span className="stat-val">{td.l}</span></div>
+                                <div className="stat-item"><span className="stat-label">PCT</span><span className="stat-val">{td.pct.toFixed(3).replace(/^0/,"")}</span></div>
+                                <div className="stat-item"><span className="stat-label">Rank</span><span className="stat-val">#{td.rank}</span></div>
+                              </div>}
                             </div>
                           </div>
                           <div className="teamcard-btns">
-                            <button className="pickbtn t" disabled={counts[current].treasure >= PER_CAT} onClick={() => pick(t, "treasure")}>💎 Treasure</button>
-                            <button className="pickbtn tr" disabled={counts[current].trash >= PER_CAT} onClick={() => pick(t, "trash")}>🗑️ Trash</button>
+                            <button className="pickbtn t" disabled={counts[current]?.treasure>=PER_CAT} onClick={()=>pick(t,"treasure")}>💎 Treasure</button>
+                            <button className="pickbtn tr" disabled={counts[current]?.trash>=PER_CAT} onClick={()=>pick(t,"trash")}>🗑️ Trash</button>
                           </div>
                         </div>
                       );
@@ -721,12 +986,10 @@ function Draft({ commitSeason }) {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(<Root />);
 </script>
 
 <script>
-  // Compile the JSX explicitly with the classic runtime (React.createElement) so it runs
-  // as a plain inline script with no build step. Surfaces any error visibly on the page.
   (function () {
     try {
       var src = document.getElementById("app-source").textContent;

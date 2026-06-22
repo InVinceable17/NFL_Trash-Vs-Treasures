@@ -5,8 +5,10 @@ Meta-repo for tracking app ideas. Each app gets its own dedicated GitHub repo.
 ## Current apps
 
 - **[NFL_Trash-Vs-Treasures](../NFL_Trash-Vs-Treasures)** — fantasy league tracker for a 4-player NFL league
-  - Status: active (Natalie 87 pts, Kevin 81, Vince 77, Haley 74)
-  - Tech: single-file HTML + React + localStorage
+  - **What it is:** A custom fantasy football game Vince plays with Natalie, Kevin, and Haley. Each player drafts 4 "Treasure" NFL teams (bet they'll be good — score their wins) and 4 "Trash" teams (bet they'll be bad — score their losses). Players can swap teams at two checkpoints mid-season (after Weeks 1-6 and 7-12); swapped-out picks bank their stats as locked rows. Total score = Treasure wins + Trash losses.
+  - **Why it exists:** The group tracked this in a spreadsheet, but needed a real dashboard that auto-calculates standings, shows logos, highlights swapped picks, and has a built-in draft tool for future seasons.
+  - **Status:** Active — current standings: Natalie 87 pts, Kevin 81, Vince 77, Haley 74
+  - **Tech:** Single-file HTML + React (CDN) + localStorage. Three tabs: Dashboard (live standings), Edit (update W/L weekly), Draft (snake-draft setup with live ESPN standings).
 
 ## Backlog
 
