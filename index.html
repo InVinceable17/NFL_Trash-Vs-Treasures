@@ -445,6 +445,58 @@ function importLeagueData(file) {
   });
 }
 
+// ========== Replay helpers ==========
+
+// Returns a reconstructed roster as it would have been at `replayWeek`.
+// Undoes swap windows that hadn't happened yet by reversing the markers.
+function getReplayRoster(roster, replayWeek, players) {
+  const r = JSON.parse(JSON.stringify(roster));
+  const windows = [
+    { marker: "wk12", period: "Weeks 7-12", activeAfter: 12 },
+    { marker: "wk6",  period: "Weeks 1-6",  activeAfter: 6  },
+  ];
+  for (const { marker, period, activeAfter } of windows) {
+    if (replayWeek > activeAfter) continue; // swap already happened, keep it
+    for (const player of players) {
+      const pr = r[player];
+      if (!pr) continue;
+      // Teams swapped INTO treasures via this marker → send back to trash
+      const backToTrash     = pr.treasures.active.filter(([,s]) => s === marker).map(([t]) => t);
+      // Teams swapped INTO trash via this marker → send back to treasures
+      const backToTreasures = pr.trash.active.filter(([,s]) => s === marker).map(([t]) => t);
+      pr.treasures.active = pr.treasures.active.filter(([,s]) => s !== marker);
+      pr.trash.active     = pr.trash.active.filter(([,s]) => s !== marker);
+      backToTrash.forEach(t => pr.trash.active.push([t, null]));
+      backToTreasures.forEach(t => pr.treasures.active.push([t, null]));
+      // Remove banked records for this period — they hadn't been locked yet
+      pr.treasures.locked = pr.treasures.locked.filter(([,,,p]) => p !== period);
+      pr.trash.locked     = pr.trash.locked.filter(([,,,p]) => p !== period);
+    }
+  }
+  return r;
+}
+
+// Returns adjusted records: subtracts each team's banked periods from the
+// cumulative ESPN totals so only the CURRENT period's performance is shown.
+function computeAdjustedRecords(replayRecords, replayRoster, players) {
+  const bank = {};
+  for (const player of players) {
+    const pr = replayRoster[player];
+    if (!pr) continue;
+    for (const [team, w, l] of [...pr.treasures.locked, ...pr.trash.locked]) {
+      if (!bank[team]) bank[team] = [0, 0];
+      bank[team][0] += w;
+      bank[team][1] += l;
+    }
+  }
+  const adjusted = {};
+  for (const [team, [w, l]] of Object.entries(replayRecords)) {
+    const b = bank[team];
+    adjusted[team] = b ? [Math.max(0, w - b[0]), Math.max(0, l - b[1])] : [w, l];
+  }
+  return adjusted;
+}
+
 // ========== Root ==========
 function Root() {
   if (!LEAGUE_ID) return <LeagueHome />;
@@ -783,9 +835,14 @@ function App({ initState, leagueInfo, remoteUpdate }) {
 
   const players = st.players || SEED_PLAYERS;
 
-  // When replaying, override records with fetched historical data
-  const activeRecords = replayMode && replayRecords ? replayRecords : st.records;
-  const activeSt = replayMode && replayRecords ? { ...st, records: replayRecords } : st;
+  // When replaying: reconstruct roster for the current week and compute
+  // adjusted records (cumulative ESPN minus banked periods).
+  const activeSt = useMemo(() => {
+    if (!replayMode || !replayRecords) return st;
+    const replayRoster   = getReplayRoster(st.roster, replayWeek, players);
+    const adjustedRecords = computeAdjustedRecords(replayRecords, replayRoster, players);
+    return { ...st, roster: replayRoster, records: adjustedRecords };
+  }, [replayMode, replayRecords, replayWeek, st, players]);
 
   const ranking = useMemo(() => {
     const totals = {};
