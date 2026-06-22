@@ -827,7 +827,7 @@ function App({ initState, leagueInfo, remoteUpdate }) {
           {IS_ADMIN && !replayMode && <>
             <button className="btn ghost" onClick={copyViewer}>{copied ? "✓ Copied!" : "Share viewer link 🔗"}</button>
             <button className="btn ghost" onClick={resetScores}>Reset scores</button>
-            <button className="btn ghost" onClick={enterReplay}>🔁 Replay {REPLAY_SEASON}</button>
+            <button className="btn ghost" onClick={enterReplay}>🔁 Replay</button>
           </>}
           <button className="btn ghost" style={{ fontSize: 12 }} onClick={() => window.location.href = window.location.pathname}>← Leagues</button>
         </div>
