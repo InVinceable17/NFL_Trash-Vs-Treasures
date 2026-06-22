@@ -290,8 +290,8 @@ const DIVISIONS = [
 ];
 
 const ESPN_SEASON = 2025;
-const REPLAY_SEASON = 2024;
-const REPLAY_WEEKS  = 18;
+const REPLAY_SEASONS = [2024, 2025];
+const REPLAY_WEEKS   = 18;
 
 async function fetchWeekScores(season, week) {
   const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${week}&dates=${season}`;
@@ -674,10 +674,20 @@ function LeagueApp() {
 }
 
 // ========== Replay Bar ==========
-function ReplayBar({ week, setWeek, loading, error, onExit }) {
+function ReplayBar({ week, setWeek, season, setSeason, loading, error, onExit }) {
   return (
     <div className="replay-bar">
-      <span className="replay-badge">🔁 REPLAY {REPLAY_SEASON}</span>
+      <span className="replay-badge">🔁 REPLAY</span>
+      <div className="row" style={{ gap: 4 }}>
+        {REPLAY_SEASONS.map(s => (
+          <button key={s} className={"btn" + (season === s ? "" : " ghost")}
+            style={{ padding: "4px 10px", fontSize: 12 }}
+            onClick={() => { setSeason(s); setWeek(1); }}
+            disabled={loading}>
+            {s}
+          </button>
+        ))}
+      </div>
       <button className="btn ghost" style={{ padding: "5px 10px" }} onClick={() => setWeek(w => Math.max(1, w - 1))} disabled={week <= 1 || loading}>◀</button>
       <span className="week-label">{loading ? "Loading…" : `Week ${week} of ${REPLAY_WEEKS}`}</span>
       <button className="btn ghost" style={{ padding: "5px 10px" }} onClick={() => setWeek(w => Math.min(REPLAY_WEEKS, w + 1))} disabled={week >= REPLAY_WEEKS || loading}>▶</button>
@@ -699,8 +709,9 @@ function App({ initState, leagueInfo, remoteUpdate }) {
 
   // Replay state
   const [replayMode, setReplayMode]   = useState(false);
+  const [replaySeason, setReplaySeason] = useState(2025);
   const [replayWeek, setReplayWeek]   = useState(1);
-  const [replayCache, setReplayCache] = useState({}); // week -> cumulative {team:[w,l]}
+  const [replayCache, setReplayCache] = useState({}); // "season-week" -> cumulative {team:[w,l]}
   const [replayLoading, setReplayLoading] = useState(false);
   const [replayError, setReplayError] = useState(null);
   const [replayRecords, setReplayRecords] = useState(null);
@@ -730,23 +741,24 @@ function App({ initState, leagueInfo, remoteUpdate }) {
     async function load() {
       setReplayLoading(true);
       setReplayError(null);
+      setReplayRecords(null);
       try {
-        // Find highest cached week <= replayWeek to start from
+        const cacheKey = w => `${replaySeason}-${w}`;
         let cumulative = {};
         let startFrom  = 0;
         for (let w = replayWeek; w >= 1; w--) {
-          if (replayCache[w]) { cumulative = { ...replayCache[w] }; startFrom = w; break; }
+          if (replayCache[cacheKey(w)]) { cumulative = { ...replayCache[cacheKey(w)] }; startFrom = w; break; }
         }
         for (let w = startFrom + 1; w <= replayWeek; w++) {
           if (cancelled) return;
-          const deltas = await fetchWeekScores(REPLAY_SEASON, w);
+          const deltas = await fetchWeekScores(replaySeason, w);
           const next   = { ...cumulative };
           for (const [team, [wins, losses]] of Object.entries(deltas)) {
             if (!next[team]) next[team] = [0, 0];
             next[team] = [next[team][0] + wins, next[team][1] + losses];
           }
           cumulative = next;
-          setReplayCache(c => ({ ...c, [w]: cumulative }));
+          setReplayCache(c => ({ ...c, [cacheKey(w)]: cumulative }));
         }
         if (!cancelled) setReplayRecords(cumulative);
       } catch(e) {
@@ -757,7 +769,7 @@ function App({ initState, leagueInfo, remoteUpdate }) {
     }
     load();
     return () => { cancelled = true; };
-  }, [replayMode, replayWeek]);
+  }, [replayMode, replaySeason, replayWeek]);
 
   const players = st.players || SEED_PLAYERS;
 
@@ -783,7 +795,7 @@ function App({ initState, leagueInfo, remoteUpdate }) {
 
   function commitSeason(newState) { setSt(newState); setTab("dashboard"); }
 
-  function enterReplay() { setReplayMode(true); setReplayWeek(1); setReplayRecords(null); setTab("dashboard"); }
+  function enterReplay() { setReplayMode(true); setReplaySeason(2025); setReplayWeek(1); setReplayRecords(null); setTab("dashboard"); }
   function exitReplay()  { setReplayMode(false); setReplayRecords(null); setReplayError(null); }
 
   const [copied, setCopied] = useState(false);
@@ -827,6 +839,8 @@ function App({ initState, leagueInfo, remoteUpdate }) {
         <ReplayBar
           week={replayWeek}
           setWeek={setReplayWeek}
+          season={replaySeason}
+          setSeason={setReplaySeason}
           loading={replayLoading}
           error={replayError}
           onExit={exitReplay}
