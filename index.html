@@ -1128,8 +1128,9 @@ function Swap({ st, setSt, players, replayRecords }) {
     Object.fromEntries(players.map(p => [p, { treasureOut: "", trashOut: "" }]))
   );
 
-  const winInfo = SWAP_WINDOWS.find(w => w.key === win);
-  const isDone  = done[win];
+  const winInfo  = SWAP_WINDOWS.find(w => w.key === win);
+  const isDone   = done[win];
+  const [editing, setEditing] = useState(false);
 
   function toggle(player, field, team) {
     setSelections(s => ({ ...s, [player]: { ...s[player], [field]: s[player][field] === team ? "" : team } }));
@@ -1137,7 +1138,51 @@ function Swap({ st, setSt, players, replayRecords }) {
 
   function changeWindow(key) {
     setWin(key);
+    setEditing(false);
     setSelections(Object.fromEntries(players.map(p => [p, { treasureOut: "", trashOut: "" }])));
+  }
+
+  function startEditing() {
+    // Capture previous selections before undoing so UI comes back pre-filled
+    const prev = Object.fromEntries(players.map(p => {
+      const pr = st.roster[p];
+      if (!pr) return [p, { treasureOut: "", trashOut: "" }];
+      return [p, {
+        treasureOut: pr.trash.active.find(([,s]) => s === win)?.[0] || "",
+        trashOut:    pr.treasures.active.find(([,s]) => s === win)?.[0] || "",
+      }];
+    }));
+
+    // Undo: reverse the swap in st, restoring records from locked entries
+    setSt(cur => {
+      const roster  = JSON.parse(JSON.stringify(cur.roster));
+      const records = { ...cur.records };
+      for (const player of players) {
+        const pr = roster[player];
+        if (!pr) continue;
+        // Teams currently in trash with this marker came FROM treasures
+        const fromTreasures = pr.trash.active.filter(([,s]) => s === win).map(([t]) => t);
+        // Teams currently in treasures with this marker came FROM trash
+        const fromTrash = pr.treasures.active.filter(([,s]) => s === win).map(([t]) => t);
+
+        for (const team of fromTreasures) {
+          const lk = pr.treasures.locked.find(([t,,,pd]) => t === team && pd === winInfo.period);
+          if (lk) { records[team] = [lk[1], lk[2]]; pr.treasures.locked = pr.treasures.locked.filter(x => x !== lk); }
+          pr.trash.active     = pr.trash.active.filter(([t,s]) => !(t === team && s === win));
+          pr.treasures.active.push([team, null]);
+        }
+        for (const team of fromTrash) {
+          const lk = pr.trash.locked.find(([t,,,pd]) => t === team && pd === winInfo.period);
+          if (lk) { records[team] = [lk[1], lk[2]]; pr.trash.locked = pr.trash.locked.filter(x => x !== lk); }
+          pr.treasures.active = pr.treasures.active.filter(([t,s]) => !(t === team && s === win));
+          pr.trash.active.push([team, null]);
+        }
+      }
+      return { ...cur, roster, records };
+    });
+
+    setSelections(prev);
+    setEditing(true);
   }
 
   function commitSwap() {
@@ -1183,6 +1228,7 @@ function Swap({ st, setSt, players, replayRecords }) {
     });
 
     setSelections(Object.fromEntries(players.map(p => [p, { treasureOut: "", trashOut: "" }])));
+    setEditing(false);
   }
 
   const hasSelection = players.some(p => selections[p].treasureOut || selections[p].trashOut);
@@ -1219,11 +1265,14 @@ function Swap({ st, setSt, players, replayRecords }) {
   );
 
   // ---- Summary view (swap already applied) ----
-  if (isDone) {
+  if (isDone && !editing) {
     const summary = getSwapSummary();
     return (
       <div>
-        <WindowTabs />
+        <div className="row between" style={{ marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
+          <WindowTabs />
+          <button className="btn ghost" onClick={startEditing}>✏️ Edit swaps</button>
+        </div>
         <div className="sub" style={{ marginBottom: 16 }}>Swap decisions for <strong>{winInfo.label}</strong></div>
         <div className="dash">
           {players.map(p => {
