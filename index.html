@@ -1083,7 +1083,36 @@ const SWAP_WINDOWS = [
   { key: "wk12", label: "After Week 12", period: "Weeks 7-12" },
 ];
 
+function SwapTeamRow({ team, records, selected, label, onClick }) {
+  const [w, l] = records[team] || [0, 0];
+  const pts    = label === "treasure" ? w : l;
+  return (
+    <div onClick={onClick} style={{
+      display: "flex", alignItems: "center", gap: 8,
+      padding: "6px 8px", borderRadius: 8, cursor: "pointer", marginBottom: 3,
+      background: selected
+        ? label === "treasure" ? "rgba(79,176,255,.18)" : "rgba(245,197,66,.14)"
+        : "var(--panel-2)",
+      border: `1px solid ${selected
+        ? label === "treasure" ? "var(--trash)" : "var(--treasure)"
+        : "var(--line)"}`,
+    }}>
+      {TEAM_ABBREV[team] && <img className="team-logo-sm" src={teamLogo(team)} alt="" />}
+      <span style={{ flex: 1, fontSize: 12, fontWeight: selected ? 700 : 500 }}>
+        {selected && (label === "treasure" ? "→🗑️ " : "→💎 ")}{team}
+      </span>
+      <span style={{ fontSize: 11, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>{w}W {l}L</span>
+      <span style={{
+        fontSize: 11, fontWeight: 800, minWidth: 28, textAlign: "right",
+        color: selected ? (label === "treasure" ? "var(--trash)" : "var(--treasure)") : "var(--muted)"
+      }}>{pts}pt{pts !== 1 ? "s" : ""}</span>
+    </div>
+  );
+}
+
 function Swap({ st, setSt, players, replayRecords }) {
+  const liveRecords = replayRecords || st.records;
+
   const doneWk6  = players.some(p => {
     const r = st.roster[p];
     return r && ([...r.treasures.active, ...r.trash.active].some(([,s]) => s === "wk6"));
@@ -1094,13 +1123,16 @@ function Swap({ st, setSt, players, replayRecords }) {
   });
   const done = { wk6: doneWk6, wk12: doneWk12 };
 
-  const [win, setWin]           = useState(!doneWk6 ? "wk6" : "wk12");
+  const [win, setWin] = useState(!doneWk6 ? "wk6" : "wk12");
   const [selections, setSelections] = useState(() =>
     Object.fromEntries(players.map(p => [p, { treasureOut: "", trashOut: "" }]))
   );
 
-  function setSelection(player, field, value) {
-    setSelections(s => ({ ...s, [player]: { ...s[player], [field]: value } }));
+  const winInfo = SWAP_WINDOWS.find(w => w.key === win);
+  const isDone  = done[win];
+
+  function toggle(player, field, team) {
+    setSelections(s => ({ ...s, [player]: { ...s[player], [field]: s[player][field] === team ? "" : team } }));
   }
 
   function changeWindow(key) {
@@ -1109,8 +1141,7 @@ function Swap({ st, setSt, players, replayRecords }) {
   }
 
   function commitSwap() {
-    const winInfo = SWAP_WINDOWS.find(w => w.key === win);
-    const lines   = players.flatMap(p => {
+    const lines = players.flatMap(p => {
       const sel = selections[p];
       const out = [];
       if (sel.treasureOut) out.push(`${p}: 💎 ${sel.treasureOut} → 🗑️ Trash`);
@@ -1118,12 +1149,11 @@ function Swap({ st, setSt, players, replayRecords }) {
       return out;
     });
     if (!lines.length) return;
-    if (!confirm(`Apply ${winInfo.label} swaps?\n\n${lines.join("\n")}\n\nBanked W/L records will be locked. This cannot be undone.`)) return;
+    if (!confirm(`Apply ${winInfo.label} swaps?\n\n${lines.join("\n")}\n\nBanked W/L will be locked. Cannot be undone.`)) return;
 
     setSt(prev => {
       const roster  = JSON.parse(JSON.stringify(prev.roster));
       const records = { ...prev.records };
-      // Use replay records for banking if replaying, so locked rows reflect historical performance
       const source  = replayRecords || prev.records;
 
       for (const player of players) {
@@ -1131,20 +1161,20 @@ function Swap({ st, setSt, players, replayRecords }) {
         const pr  = roster[player];
 
         if (sel.treasureOut) {
-          const team   = sel.treasureOut;
+          const team = sel.treasureOut;
           const [w, l] = source[team] || [0, 0];
           pr.treasures.locked.push([team, w, l, winInfo.period]);
           pr.treasures.active = pr.treasures.active.filter(([t]) => t !== team);
-          pr.trash.active.push([team, winInfo.key]);
+          pr.trash.active.push([team, win]);
           records[team] = [0, 0];
         }
 
         if (sel.trashOut) {
-          const team   = sel.trashOut;
+          const team = sel.trashOut;
           const [w, l] = source[team] || [0, 0];
           pr.trash.locked.push([team, w, l, winInfo.period]);
           pr.trash.active = pr.trash.active.filter(([t]) => t !== team);
-          pr.treasures.active.push([team, winInfo.key]);
+          pr.treasures.active.push([team, win]);
           records[team] = [0, 0];
         }
       }
@@ -1157,51 +1187,132 @@ function Swap({ st, setSt, players, replayRecords }) {
 
   const hasSelection = players.some(p => selections[p].treasureOut || selections[p].trashOut);
 
+  // Reconstruct swap decisions from roster markers + locked entries
+  function getSwapSummary() {
+    return Object.fromEntries(players.map(p => {
+      const pr = st.roster[p];
+      if (!pr) return [p, { toTreasure: [], toTrash: [] }];
+      const toTreasure = pr.treasures.active
+        .filter(([,s]) => s === win)
+        .map(([team]) => {
+          const locked = pr.trash.locked.find(([t,,,pd]) => t === team && pd === winInfo.period);
+          return { team, w: locked?.[1] ?? 0, l: locked?.[2] ?? 0 };
+        });
+      const toTrash = pr.trash.active
+        .filter(([,s]) => s === win)
+        .map(([team]) => {
+          const locked = pr.treasures.locked.find(([t,,,pd]) => t === team && pd === winInfo.period);
+          return { team, w: locked?.[1] ?? 0, l: locked?.[2] ?? 0 };
+        });
+      return [p, { toTreasure, toTrash }];
+    }));
+  }
+
+  const WindowTabs = () => (
+    <div className="row" style={{ gap: 8, marginBottom: 20 }}>
+      {SWAP_WINDOWS.map(w => (
+        <button key={w.key} className={"btn" + (win === w.key ? "" : " ghost")} onClick={() => changeWindow(w.key)}>
+          {w.label} {done[w.key] ? "✓" : ""}
+        </button>
+      ))}
+    </div>
+  );
+
+  // ---- Summary view (swap already applied) ----
+  if (isDone) {
+    const summary = getSwapSummary();
+    return (
+      <div>
+        <WindowTabs />
+        <div className="sub" style={{ marginBottom: 16 }}>Swap decisions for <strong>{winInfo.label}</strong></div>
+        <div className="dash">
+          {players.map(p => {
+            const { toTreasure, toTrash } = summary[p] || { toTreasure: [], toTrash: [] };
+            const noSwap = !toTreasure.length && !toTrash.length;
+            return (
+              <div className="col" key={p}>
+                <div className="col-head">{p}</div>
+                <div style={{ padding: "10px 12px" }}>
+                  {noSwap ? (
+                    <div className="sub">No swap made</div>
+                  ) : (
+                    <>
+                      {toTreasure.map(({ team, w, l }) => (
+                        <div key={team} style={{ marginBottom: 8 }}>
+                          <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 3 }}>🗑️ → 💎 Moved to Treasure</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            {TEAM_ABBREV[team] && <img className="team-logo-sm" src={teamLogo(team)} alt="" />}
+                            <span style={{ fontSize: 13, fontWeight: 700 }}>{team}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                            Banked as Trash: {w}W–{l}L ({l} pts)
+                          </div>
+                        </div>
+                      ))}
+                      {toTrash.map(({ team, w, l }) => (
+                        <div key={team} style={{ marginBottom: 8 }}>
+                          <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 3 }}>💎 → 🗑️ Moved to Trash</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            {TEAM_ABBREV[team] && <img className="team-logo-sm" src={teamLogo(team)} alt="" />}
+                            <span style={{ fontSize: 13, fontWeight: 700 }}>{team}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                            Banked as Treasure: {w}W–{l}L ({w} pts)
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Decision UI (swap not yet applied) ----
   return (
     <div>
+      <WindowTabs />
       <div className="sub" style={{ marginBottom: 16 }}>
-        Move teams between your Treasures and Trash. Banked W/L is locked in; moved teams reset to 0-0 going forward.
+        Click a team to select it for swapping. Click again to deselect.
+        {replayRecords && <span style={{ color: "var(--accent)", marginLeft: 8 }}>Using replay records for banking.</span>}
       </div>
-
-      <div className="row" style={{ gap: 8, marginBottom: 20 }}>
-        {SWAP_WINDOWS.map(w => (
-          <button key={w.key} className={"btn" + (win === w.key ? "" : " ghost")} onClick={() => changeWindow(w.key)}>
-            {w.label} {done[w.key] ? "✓" : ""}
-          </button>
-        ))}
-      </div>
-
-      {done[win] && (
-        <div className="viewer-banner" style={{ marginBottom: 16 }}>
-          ⚠️ The {SWAP_WINDOWS.find(w => w.key === win).label} swap has already been applied.
-          Proceeding will apply additional swaps on top.
-        </div>
-      )}
-
-      <div className="editgrid">
+      <div className="dash">
         {players.map(p => {
           const pr  = st.roster[p];
           if (!pr) return null;
-          const sel       = selections[p];
-          const treasures = pr.treasures.active.map(([t]) => t);
-          const trash     = pr.trash.active.map(([t]) => t);
+          const sel = selections[p];
           return (
-            <div className="swap-player" key={p}>
-              <h2 style={{ marginBottom: 12 }}>{p}</h2>
-              <div style={{ marginBottom: 12 }}>
-                <div className="sec-head treasure" style={{ padding: "4px 0 6px" }}>💎 Move treasure → trash</div>
-                <select className="text-input" value={sel.treasureOut} onChange={e => setSelection(p, "treasureOut", e.target.value)}>
-                  <option value="">— No swap —</option>
-                  {treasures.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+            <div className="col" key={p}>
+              <div className="col-head">{p}</div>
+
+              <div className="sec-head treasure">💎 Treasures → click to move to Trash</div>
+              <div style={{ padding: "4px 8px 8px" }}>
+                {pr.treasures.active.map(([team]) => (
+                  <SwapTeamRow key={team} team={team} records={liveRecords} label="treasure"
+                    selected={sel.treasureOut === team}
+                    onClick={() => toggle(p, "treasureOut", team)} />
+                ))}
               </div>
-              <div>
-                <div className="sec-head trash" style={{ padding: "4px 0 6px" }}>🗑️ Move trash → treasure</div>
-                <select className="text-input" value={sel.trashOut} onChange={e => setSelection(p, "trashOut", e.target.value)}>
-                  <option value="">— No swap —</option>
-                  {trash.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+
+              <div className="sec-head trash">🗑️ Trash → click to move to Treasures</div>
+              <div style={{ padding: "4px 8px 8px" }}>
+                {pr.trash.active.map(([team]) => (
+                  <SwapTeamRow key={team} team={team} records={liveRecords} label="trash"
+                    selected={sel.trashOut === team}
+                    onClick={() => toggle(p, "trashOut", team)} />
+                ))}
               </div>
+
+              {(sel.treasureOut || sel.trashOut) && (
+                <div style={{ padding: "8px 12px", borderTop: "1px solid var(--line)", fontSize: 12, color: "var(--muted)" }}>
+                  {sel.trashOut    && <div>🗑️→💎 {sel.trashOut}</div>}
+                  {sel.treasureOut && <div>💎→🗑️ {sel.treasureOut}</div>}
+                </div>
+              )}
             </div>
           );
         })}
@@ -1209,7 +1320,7 @@ function Swap({ st, setSt, players, replayRecords }) {
 
       <div className="row" style={{ gap: 12, marginTop: 20 }}>
         <button className="btn" onClick={commitSwap} disabled={!hasSelection}>Apply swaps →</button>
-        {!hasSelection && <span className="sub">Select at least one swap above to continue</span>}
+        {!hasSelection && <span className="sub">Click teams above to select swaps</span>}
       </div>
     </div>
   );
