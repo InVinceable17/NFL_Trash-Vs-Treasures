@@ -127,6 +127,8 @@
   .erow .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ehdr { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 10px 0 4px; font-weight: 700; }
 
+  select.text-input { appearance: auto; }
+  .swap-player { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
   .league-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .text-input { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 14px; width: 100%; }
   .text-input:focus { outline: none; border-color: var(--accent); }
@@ -851,6 +853,7 @@ function App({ initState, leagueInfo, remoteUpdate }) {
         <div className="tabs">
           <button className={"tab" + (tab === "dashboard" ? " active" : "")} onClick={() => setTab("dashboard")}>Dashboard</button>
           {IS_ADMIN && <button className={"tab" + (tab === "edit" ? " active" : "")} onClick={() => setTab("edit")}>Edit</button>}
+          {IS_ADMIN && <button className={"tab" + (tab === "swap" ? " active" : "")} onClick={() => setTab("swap")}>Swap</button>}
           {IS_ADMIN && <button className={"tab" + (tab === "draft" ? " active" : "")} onClick={() => setTab("draft")}>Draft</button>}
         </div>
       )}
@@ -859,6 +862,8 @@ function App({ initState, leagueInfo, remoteUpdate }) {
         ? <Dashboard st={activeSt} ranking={ranking} players={players} />
         : tab === "edit"
         ? <Edit st={st} setSt={setSt} players={players} />
+        : tab === "swap"
+        ? <Swap st={st} setSt={setSt} players={players} />
         : <Draft commitSeason={commitSeason} players={players} leagueId={LEAGUE_ID} />}
     </div>
   );
@@ -1004,6 +1009,142 @@ function Edit({ st, setSt, players }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ========== Swap ==========
+const SWAP_WINDOWS = [
+  { key: "wk6",  label: "After Week 6",  period: "Weeks 1-6"  },
+  { key: "wk12", label: "After Week 12", period: "Weeks 7-12" },
+];
+
+function Swap({ st, setSt, players }) {
+  const doneWk6  = players.some(p => {
+    const r = st.roster[p];
+    return r && ([...r.treasures.active, ...r.trash.active].some(([,s]) => s === "wk6"));
+  });
+  const doneWk12 = players.some(p => {
+    const r = st.roster[p];
+    return r && ([...r.treasures.active, ...r.trash.active].some(([,s]) => s === "wk12"));
+  });
+  const done = { wk6: doneWk6, wk12: doneWk12 };
+
+  const [win, setWin]           = useState(!doneWk6 ? "wk6" : "wk12");
+  const [selections, setSelections] = useState(() =>
+    Object.fromEntries(players.map(p => [p, { treasureOut: "", trashOut: "" }]))
+  );
+
+  function setSelection(player, field, value) {
+    setSelections(s => ({ ...s, [player]: { ...s[player], [field]: value } }));
+  }
+
+  function changeWindow(key) {
+    setWin(key);
+    setSelections(Object.fromEntries(players.map(p => [p, { treasureOut: "", trashOut: "" }])));
+  }
+
+  function commitSwap() {
+    const winInfo = SWAP_WINDOWS.find(w => w.key === win);
+    const lines   = players.flatMap(p => {
+      const sel = selections[p];
+      const out = [];
+      if (sel.treasureOut) out.push(`${p}: 💎 ${sel.treasureOut} → 🗑️ Trash`);
+      if (sel.trashOut)    out.push(`${p}: 🗑️ ${sel.trashOut} → 💎 Treasure`);
+      return out;
+    });
+    if (!lines.length) return;
+    if (!confirm(`Apply ${winInfo.label} swaps?\n\n${lines.join("\n")}\n\nBanked W/L records will be locked. This cannot be undone.`)) return;
+
+    setSt(prev => {
+      const roster  = JSON.parse(JSON.stringify(prev.roster));
+      const records = { ...prev.records };
+
+      for (const player of players) {
+        const sel = selections[player];
+        const pr  = roster[player];
+
+        if (sel.treasureOut) {
+          const team   = sel.treasureOut;
+          const [w, l] = records[team] || [0, 0];
+          pr.treasures.locked.push([team, w, l, winInfo.period]);
+          pr.treasures.active = pr.treasures.active.filter(([t]) => t !== team);
+          pr.trash.active.push([team, winInfo.key]);
+          records[team] = [0, 0];
+        }
+
+        if (sel.trashOut) {
+          const team   = sel.trashOut;
+          const [w, l] = records[team] || [0, 0];
+          pr.trash.locked.push([team, w, l, winInfo.period]);
+          pr.trash.active = pr.trash.active.filter(([t]) => t !== team);
+          pr.treasures.active.push([team, winInfo.key]);
+          records[team] = [0, 0];
+        }
+      }
+
+      return { ...prev, roster, records };
+    });
+
+    setSelections(Object.fromEntries(players.map(p => [p, { treasureOut: "", trashOut: "" }])));
+  }
+
+  const hasSelection = players.some(p => selections[p].treasureOut || selections[p].trashOut);
+
+  return (
+    <div>
+      <div className="sub" style={{ marginBottom: 16 }}>
+        Move teams between your Treasures and Trash. Banked W/L is locked in; moved teams reset to 0-0 going forward.
+      </div>
+
+      <div className="row" style={{ gap: 8, marginBottom: 20 }}>
+        {SWAP_WINDOWS.map(w => (
+          <button key={w.key} className={"btn" + (win === w.key ? "" : " ghost")} onClick={() => changeWindow(w.key)}>
+            {w.label} {done[w.key] ? "✓" : ""}
+          </button>
+        ))}
+      </div>
+
+      {done[win] && (
+        <div className="viewer-banner" style={{ marginBottom: 16 }}>
+          ⚠️ The {SWAP_WINDOWS.find(w => w.key === win).label} swap has already been applied.
+          Proceeding will apply additional swaps on top.
+        </div>
+      )}
+
+      <div className="editgrid">
+        {players.map(p => {
+          const pr  = st.roster[p];
+          if (!pr) return null;
+          const sel       = selections[p];
+          const treasures = pr.treasures.active.map(([t]) => t);
+          const trash     = pr.trash.active.map(([t]) => t);
+          return (
+            <div className="swap-player" key={p}>
+              <h2 style={{ marginBottom: 12 }}>{p}</h2>
+              <div style={{ marginBottom: 12 }}>
+                <div className="sec-head treasure" style={{ padding: "4px 0 6px" }}>💎 Move treasure → trash</div>
+                <select className="text-input" value={sel.treasureOut} onChange={e => setSelection(p, "treasureOut", e.target.value)}>
+                  <option value="">— No swap —</option>
+                  {treasures.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <div className="sec-head trash" style={{ padding: "4px 0 6px" }}>🗑️ Move trash → treasure</div>
+                <select className="text-input" value={sel.trashOut} onChange={e => setSelection(p, "trashOut", e.target.value)}>
+                  <option value="">— No swap —</option>
+                  {trash.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="row" style={{ gap: 12, marginTop: 20 }}>
+        <button className="btn" onClick={commitSwap} disabled={!hasSelection}>Apply swaps →</button>
+        {!hasSelection && <span className="sub">Select at least one swap above to continue</span>}
       </div>
     </div>
   );
