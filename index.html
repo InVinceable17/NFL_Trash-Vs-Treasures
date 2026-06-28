@@ -310,7 +310,8 @@ const DIVISIONS = [
   { conf:"NFC", div:"West",  teams:["Arizona Cardinals","Los Angeles Rams","San Francisco 49ers","Seattle Seahawks"] },
 ];
 
-const ESPN_SEASON = 2025;
+const ESPN_SEASON = 2025;          // default season when a league hasn't set one
+const SEASONS = [2024, 2025, 2026]; // selectable seasons for sync + draft
 const REPLAY_SEASONS = [2024, 2025];
 const REPLAY_WEEKS   = 18;
 
@@ -334,8 +335,8 @@ async function fetchWeekScores(season, week) {
   return deltas;
 }
 
-async function fetchTeamData() {
-  const url = `https://site.api.espn.com/apis/v2/sports/football/nfl/standings?season=${ESPN_SEASON}&seasontype=2`;
+async function fetchTeamData(season = ESPN_SEASON) {
+  const url = `https://site.api.espn.com/apis/v2/sports/football/nfl/standings?season=${season}&seasontype=2`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`ESPN ${res.status}`);
   const data = await res.json();
@@ -1021,11 +1022,11 @@ function App({ initState, leagueInfo, remoteUpdate }) {
       {activeTab === "dashboard"
         ? <Dashboard st={activeSt} ranking={ranking} players={players} />
         : activeTab === "edit"
-        ? <Edit st={st} setSt={setSt} players={players} />
+        ? <Edit st={st} setSt={setSt} players={players} leagueId={LEAGUE_ID} leagueName={leagueName} />
         : activeTab === "swap"
         ? <Swap st={st} setSt={setSt} players={players} replayRecords={replayMode ? replayRecords : null} />
         : <Draft commitSeason={commitSeason} players={players} leagueId={LEAGUE_ID}
-                 initialDraft={st.draft} syncDraft={syncDraft} />}
+                 initialDraft={st.draft} syncDraft={syncDraft} season={st.season || ESPN_SEASON} />}
     </div>
   );
 }
@@ -1121,7 +1122,49 @@ function Dashboard({ st, ranking, players }) {
   );
 }
 
-function Edit({ st, setSt, players }) {
+function Edit({ st, setSt, players, leagueId, leagueName }) {
+  const season = st.season || ESPN_SEASON;
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState(null);          // { type: "ok"|"err"|"info", text }
+  const [undoRecords, setUndoRecords] = useState(null);  // pre-sync snapshot for one-click revert
+
+  function setSeason(yr) { setSt(s => ({ ...s, season: Number(yr) })); setSyncMsg(null); }
+
+  function backupNow() { exportLeagueData(leagueId, leagueName); }
+
+  async function syncFromESPN() {
+    setSyncing(true); setSyncMsg(null);
+    try {
+      const data = await fetchTeamData(season);
+      const cumulative = {};
+      Object.entries(data).forEach(([team, d]) => { cumulative[team] = [d.w || 0, d.l || 0]; });
+      const games = Object.values(cumulative).reduce((a, [w, l]) => a + w + l, 0);
+      // Guard: don't let an unstarted/empty season wipe good data
+      if (!Object.keys(cumulative).length || games === 0) {
+        setSyncMsg({ type: "err", text: `ESPN shows no completed games for ${season} yet — nothing synced. Your records were left as-is.` });
+        return;
+      }
+      // Subtract banked swap periods so records reflect only the active period
+      const adjusted = computeAdjustedRecords(cumulative, st.roster, players);
+      const n = Object.keys(adjusted).length;
+      if (!confirm(`Pull ${season} records from ESPN?\n\nUpdates W/L for ${n} teams from live standings. Rosters and locked/banked rows are untouched. You can Undo right after.`)) return;
+      setUndoRecords(JSON.parse(JSON.stringify(st.records)));
+      setSt(s => ({ ...s, records: { ...s.records, ...adjusted } }));
+      setSyncMsg({ type: "ok", text: `✓ Synced ${season} records for ${n} teams.` });
+    } catch (e) {
+      setSyncMsg({ type: "err", text: `ESPN sync failed: ${e.message || e}. Records unchanged.` });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  function undoSync() {
+    if (!undoRecords) return;
+    setSt(s => ({ ...s, records: undoRecords }));
+    setUndoRecords(null);
+    setSyncMsg({ type: "info", text: "Reverted to pre-sync records." });
+  }
+
   function setRec(team, idx, val) {
     const n = Math.max(0, Math.min(20, parseInt(val, 10) || 0));
     setSt(s => ({ ...s, records: { ...s.records, [team]: idx === 0 ? [n, (s.records[team]||[0,0])[1]] : [(s.records[team]||[0,0])[0], n] } }));
@@ -1134,9 +1177,29 @@ function Edit({ st, setSt, players }) {
       return { ...s, roster };
     });
   }
+  const msgColor = syncMsg ? (syncMsg.type === "ok" ? "#4ade80" : syncMsg.type === "err" ? "var(--pink)" : "var(--muted)") : null;
   return (
     <div>
-      <div className="sub" style={{ marginBottom: 14 }}>Update active team records each week. Locked rows are banked swap history — edit only to correct.</div>
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="row between" style={{ flexWrap: "wrap", gap: 10 }}>
+          <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+            <label style={{ fontSize: 12, color: "var(--muted)" }}>SEASON</label>
+            <select className="text-input" style={{ width: "auto" }} value={season} onChange={e => setSeason(e.target.value)}>
+              {SEASONS.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <button className="btn" onClick={syncFromESPN} disabled={syncing}>
+              {syncing ? "Syncing…" : `⟳ Pull ${season} records from ESPN`}
+            </button>
+            {undoRecords && <button className="btn ghost" onClick={undoSync}>↩ Undo sync</button>}
+          </div>
+          <button className="btn ghost" onClick={backupNow} title="Download a restore-compatible JSON snapshot">⬇️ Backup now</button>
+        </div>
+        {syncMsg && <div style={{ marginTop: 10, fontSize: 13, color: msgColor }}>{syncMsg.text}</div>}
+        <div className="sub" style={{ marginTop: 8 }}>
+          Auto-sync pulls live W/L from ESPN for the selected season. It only touches active team records (never rosters or banked rows), warns instead of wiping if the season hasn't started, and can be undone. Back up first if you want a durable safety net.
+        </div>
+      </div>
+      <div className="sub" style={{ marginBottom: 14 }}>Or update active team records by hand below. Locked rows are banked swap history — edit only to correct.</div>
       <div className="editgrid">
         {players.map(p => {
           if (!st.roster[p]) return null;
@@ -1535,7 +1598,7 @@ function DraftLive({ draft, players }) {
   );
 }
 
-function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft }) {
+function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft, season = ESPN_SEASON }) {
   const [draft, setDraft] = useState(() => initialDraft || loadDraft(leagueId) || { phase: "order", order: [...players], picks: [] });
   const [teamData, setTeamData] = useState(null);
   const [tdLoading, setTdLoading] = useState(true);
@@ -1548,11 +1611,11 @@ function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft }) {
 
   function loadESPN() {
     setTdLoading(true); setTdError(null);
-    fetchTeamData()
+    fetchTeamData(season)
       .then(d => { setTeamData(d); setTdLoading(false); })
       .catch(e => { setTdError(e.message || "Failed"); setTdLoading(false); });
   }
-  useEffect(loadESPN, []);
+  useEffect(loadESPN, [season]);
 
   const totalPicks = ROUNDS * players.length;
   const taken  = useMemo(() => new Set(draft.picks.map(p => p.team)), [draft.picks]);
@@ -1601,9 +1664,9 @@ function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft }) {
   if (draft.phase === "order") return (
     <div>
       <div className="sub" style={{marginBottom:8}}>Drag to reorder, then snake-draft 4 💎 Treasures and 4 🗑️ Trash per player — 8 rounds total.</div>
-      {tdLoading && <div className="espn-status">⏳ Loading {ESPN_SEASON} standings from ESPN…</div>}
+      {tdLoading && <div className="espn-status">⏳ Loading {season} standings from ESPN…</div>}
       {tdError && <div className="espn-status err">⚠️ ESPN load failed: {tdError} <button className="btn ghost" style={{marginLeft:8,padding:"3px 10px"}} onClick={loadESPN}>Retry</button></div>}
-      {teamData && <div className="espn-status">✓ {ESPN_SEASON} standings loaded</div>}
+      {teamData && <div className="espn-status">✓ {season} standings loaded</div>}
       <button className="btn ghost" onClick={randomize} style={{marginBottom:12}}>🎲 Randomize order</button>
       <div className="draft-order-list">
         {draft.order.map((p,i) => (
