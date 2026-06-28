@@ -152,6 +152,7 @@
 <!-- Firebase compat SDK (safe to use in no-build inline scripts) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 
 <script>
   firebase.initializeApp({
@@ -171,8 +172,9 @@
 <script type="text/jsx-source" id="app-source">
 const { useState, useEffect, useMemo, useRef } = React;
 
-// ---- Firestore ----
-const db = firebase.firestore();
+// ---- Firestore + Auth ----
+const db   = firebase.firestore();
+const auth = firebase.auth();
 
 function toFirestoreFormat(state) {
   const roster = {};
@@ -230,7 +232,14 @@ function fsSubscribe(leagueId, onData) {
 // ---- URL routing ----
 const _params  = new URLSearchParams(window.location.search);
 const LEAGUE_ID = _params.get("league");
-const IS_ADMIN  = _params.get("admin") === "1";
+const IS_ADMIN  = _params.get("admin") === "1"; // requests admin VIEW; editing also requires sign-in below
+
+// ---- Admin identity ----
+// Paste your Firebase UID here (sign in once and it'll be shown on screen),
+// then put the SAME uid in your Firestore security rules. Until it's set,
+// any signed-in Google account can edit in "bootstrap" mode.
+const ADMIN_UID = "REPLACE_WITH_YOUR_UID";
+const ADMIN_CONFIGURED = ADMIN_UID && ADMIN_UID !== "REPLACE_WITH_YOUR_UID";
 
 // ---- Local storage (admin cache + league index) ----
 const LEGACY_KEY  = "trash-treasures-v2";
@@ -761,6 +770,15 @@ function App({ initState, leagueInfo, remoteUpdate }) {
   const [tab, setTab]     = useState("dashboard");
   const [syncStatus, setSyncStatus] = useState("saved");
 
+  // Auth: only the admin signs in. Viewers never touch this path.
+  const [authUser, setAuthUser] = useState(() => auth.currentUser);
+  useEffect(() => auth.onAuthStateChanged(setAuthUser), []);
+  // canEdit gates every write/edit affordance. The Firestore rules enforce the
+  // same thing server-side, so faking ?admin=1 can't actually save anything.
+  const canEdit = IS_ADMIN && !!authUser && (ADMIN_CONFIGURED ? authUser.uid === ADMIN_UID : true);
+  function signIn()  { auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e => alert("Sign-in failed: " + e.message)); }
+  function signOut() { auth.signOut(); }
+
   // Replay state
   const [replayMode, setReplayMode]   = useState(false);
   const [replaySeason, setReplaySeason] = useState(2025);
@@ -777,7 +795,7 @@ function App({ initState, leagueInfo, remoteUpdate }) {
 
   // Admin: save to localStorage immediately, Firestore with 1s debounce
   useEffect(() => {
-    if (!IS_ADMIN) return;
+    if (!canEdit) return;
     saveLocalState(LEAGUE_ID, st);
     setSyncStatus("syncing");
     const t = setTimeout(() => {
@@ -874,6 +892,8 @@ function App({ initState, leagueInfo, remoteUpdate }) {
   const leagueName = leagueInfo?.name || "Trash & Treasures";
   const syncLabel = { saved: "Saved", syncing: "Saving…", error: "Sync error" }[syncStatus];
   const syncClass = { saved: "saved", syncing: "syncing", error: "error" }[syncStatus];
+  // Fall back to the read-only dashboard if editing isn't allowed (e.g. signed out mid-edit)
+  const activeTab = canEdit ? tab : "dashboard";
 
   return (
     <div>
@@ -882,7 +902,7 @@ function App({ initState, leagueInfo, remoteUpdate }) {
           <h1>🗑️ Trash &amp; 💎 Treasures</h1>
           <div className="sub">
             {leagueName}
-            {IS_ADMIN && !replayMode && (
+            {canEdit && !replayMode && (
               <span title={syncLabel}>
                 <span className={"sync-dot " + syncClass} />
                 <span style={{ fontSize: 11, marginLeft: 4, color: "var(--muted)" }}>{syncLabel}</span>
@@ -891,16 +911,34 @@ function App({ initState, leagueInfo, remoteUpdate }) {
           </div>
         </div>
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-          {IS_ADMIN && !replayMode && <>
+          {canEdit && !replayMode && <>
             <button className="btn ghost" onClick={copyViewer}>{copied ? "✓ Copied!" : "Share viewer link 🔗"}</button>
             <button className="btn ghost" onClick={resetScores}>Reset scores</button>
             <button className="btn ghost" onClick={enterReplay}>🔁 Replay</button>
           </>}
+          {IS_ADMIN && (canEdit
+            ? <button className="btn ghost" onClick={signOut}>Sign out</button>
+            : <button className="btn" onClick={signIn}>Sign in to edit</button>)}
           <button className="btn ghost" style={{ fontSize: 12 }} onClick={() => window.location.href = window.location.pathname}>← Leagues</button>
         </div>
       </div>
 
       {!IS_ADMIN && <div className="viewer-banner">👀 View-only — scores update live when the admin makes changes.</div>}
+
+      {IS_ADMIN && !canEdit && (
+        <div className="viewer-banner" style={{ borderColor: "var(--accent)" }}>
+          {!authUser
+            ? <>🔒 Admin mode — <strong>sign in</strong> to edit. Viewers don't need to.</>
+            : <>This Google account isn't the admin for this app. <a onClick={signOut} style={{ color: "var(--accent)", cursor: "pointer" }}>Switch account</a>.</>}
+        </div>
+      )}
+
+      {canEdit && !ADMIN_CONFIGURED && (
+        <div className="viewer-banner" style={{ borderColor: "var(--treasure)" }}>
+          ⚠️ <strong>Setup mode.</strong> Paste this UID into <code>ADMIN_UID</code> (in index.html) and your Firestore rules, then redeploy to lock editing to just you:
+          <div style={{ marginTop: 6, fontFamily: "monospace", fontSize: 12, color: "var(--treasure)", wordBreak: "break-all" }}>{authUser.uid}</div>
+        </div>
+      )}
 
       {replayMode && (
         <ReplayBar
@@ -915,17 +953,17 @@ function App({ initState, leagueInfo, remoteUpdate }) {
       )}
 
       <div className="tabs">
-        <button className={"tab" + (tab === "dashboard" ? " active" : "")} onClick={() => setTab("dashboard")}>Dashboard</button>
-        {IS_ADMIN && <button className={"tab" + (tab === "edit" ? " active" : "")} onClick={() => setTab("edit")}>Edit</button>}
-        {IS_ADMIN && <button className={"tab" + (tab === "swap" ? " active" : "")} onClick={() => setTab("swap")}>Swap</button>}
-        {IS_ADMIN && <button className={"tab" + (tab === "draft" ? " active" : "")} onClick={() => setTab("draft")}>Draft</button>}
+        <button className={"tab" + (activeTab === "dashboard" ? " active" : "")} onClick={() => setTab("dashboard")}>Dashboard</button>
+        {canEdit && <button className={"tab" + (activeTab === "edit" ? " active" : "")} onClick={() => setTab("edit")}>Edit</button>}
+        {canEdit && <button className={"tab" + (activeTab === "swap" ? " active" : "")} onClick={() => setTab("swap")}>Swap</button>}
+        {canEdit && <button className={"tab" + (activeTab === "draft" ? " active" : "")} onClick={() => setTab("draft")}>Draft</button>}
       </div>
 
-      {tab === "dashboard"
+      {activeTab === "dashboard"
         ? <Dashboard st={activeSt} ranking={ranking} players={players} />
-        : tab === "edit"
+        : activeTab === "edit"
         ? <Edit st={st} setSt={setSt} players={players} />
-        : tab === "swap"
+        : activeTab === "swap"
         ? <Swap st={st} setSt={setSt} players={players} replayRecords={replayMode ? replayRecords : null} />
         : <Draft commitSeason={commitSeason} players={players} leagueId={LEAGUE_ID} />}
     </div>
