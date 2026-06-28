@@ -517,6 +517,18 @@ function computeAdjustedRecords(replayRecords, replayRoster, players) {
   return adjusted;
 }
 
+// Fetch live ESPN standings for a season and return active-period records
+// (cumulative minus banked swap periods). Returns null if the season has no
+// completed games yet — callers must treat null as "don't overwrite".
+async function fetchAdjustedRecords(season, roster, players) {
+  const data = await fetchTeamData(season);
+  const cumulative = {};
+  Object.entries(data).forEach(([team, d]) => { cumulative[team] = [d.w || 0, d.l || 0]; });
+  const games = Object.values(cumulative).reduce((a, [w, l]) => a + w + l, 0);
+  if (!Object.keys(cumulative).length || games === 0) return null;
+  return computeAdjustedRecords(cumulative, roster, players);
+}
+
 // ========== Root ==========
 function Root() {
   if (!LEAGUE_ID) return <LeagueHome />;
@@ -827,6 +839,9 @@ function App({ initState, leagueInfo, remoteUpdate }) {
   const [st, setSt]       = useState(() => initState.name ? initState : { ...initState, name: leagueInfo?.name });
   const [tab, setTab]     = useState("dashboard");
   const [syncStatus, setSyncStatus] = useState("saved");
+  const [lastSync, setLastSync] = useState(null); // timestamp of last successful ESPN auto-sync
+  const stRef = useRef(st);
+  useEffect(() => { stRef.current = st; });
 
   // Auth: only the admin signs in. Viewers never touch this path.
   const [authUser, setAuthUser] = useState(() => auth.currentUser);
@@ -863,6 +878,23 @@ function App({ initState, leagueInfo, remoteUpdate }) {
     }, 1000);
     return () => clearTimeout(t);
   }, [st]);
+
+  // Admin browser auto-sync: pull live ESPN records on open and every 3 min
+  // while the tab stays open. Silently caches to Firestore for viewers. The
+  // scheduled GitHub Action covers the times no admin browser is open.
+  useEffect(() => {
+    if (!canEdit || replayMode) return;
+    let cancelled = false;
+    function run() {
+      const cur = stRef.current;
+      fetchAdjustedRecords(cur.season || ESPN_SEASON, cur.roster, players)
+        .then(adj => { if (!cancelled && adj) { setSt(s => ({ ...s, records: { ...s.records, ...adj } })); setLastSync(Date.now()); } })
+        .catch(() => {});
+    }
+    run();
+    const id = setInterval(run, 3 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [canEdit, replayMode, players]);
 
   // Fetch and accumulate records up to the selected replay week
   useEffect(() => {
@@ -966,6 +998,12 @@ function App({ initState, leagueInfo, remoteUpdate }) {
               <span title={syncLabel}>
                 <span className={"sync-dot " + syncClass} />
                 <span style={{ fontSize: 11, marginLeft: 4, color: "var(--muted)" }}>{syncLabel}</span>
+              </span>
+            )}
+            {canEdit && !replayMode && (
+              <span style={{ fontSize: 11, marginLeft: 8, color: "var(--muted)" }}
+                title="Auto-pulls ESPN scores while this tab is open">
+                ⚡ ESPN auto-sync on{lastSync ? ` · ${new Date(lastSync).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}
               </span>
             )}
           </div>
@@ -1135,17 +1173,12 @@ function Edit({ st, setSt, players, leagueId, leagueName }) {
   async function syncFromESPN() {
     setSyncing(true); setSyncMsg(null);
     try {
-      const data = await fetchTeamData(season);
-      const cumulative = {};
-      Object.entries(data).forEach(([team, d]) => { cumulative[team] = [d.w || 0, d.l || 0]; });
-      const games = Object.values(cumulative).reduce((a, [w, l]) => a + w + l, 0);
+      const adjusted = await fetchAdjustedRecords(season, st.roster, players);
       // Guard: don't let an unstarted/empty season wipe good data
-      if (!Object.keys(cumulative).length || games === 0) {
+      if (!adjusted) {
         setSyncMsg({ type: "err", text: `ESPN shows no completed games for ${season} yet — nothing synced. Your records were left as-is.` });
         return;
       }
-      // Subtract banked swap periods so records reflect only the active period
-      const adjusted = computeAdjustedRecords(cumulative, st.roster, players);
       const n = Object.keys(adjusted).length;
       if (!confirm(`Pull ${season} records from ESPN?\n\nUpdates W/L for ${n} teams from live standings. Rosters and locked/banked rows are untouched. You can Undo right after.`)) return;
       setUndoRecords(JSON.parse(JSON.stringify(st.records)));

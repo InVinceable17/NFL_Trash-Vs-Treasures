@@ -1,0 +1,9 @@
+{
+  "name": "tt-sync",
+  "private": true,
+  "type": "module",
+  "description": "Scheduled job: pull NFL standings from ESPN and cache them into each league's Firestore doc.",
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}
