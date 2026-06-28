@@ -588,6 +588,19 @@ function LeagueHome() {
     navigator.clipboard.writeText(url).then(() => { setCopied(id); setTimeout(() => setCopied(null), 2000); });
   }
 
+  async function renameLeague(id, currentName) {
+    const input = prompt("Rename league:", currentName);
+    if (input == null) return;
+    const name = input.trim();
+    if (!name || name === currentName) return;
+    try {
+      await db.collection("leagues").doc(id).update({ name }); // updates only the name field
+      const updated = leagues.map(l => l.id === id ? { ...l, name } : l);
+      setLeagues(updated);
+      saveLeagues(updated);
+    } catch(e) { alert("Rename failed: " + (e.message || e)); }
+  }
+
   function deleteLeague(id, name) {
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
     localStorage.removeItem(leagueKey(id));
@@ -675,6 +688,7 @@ function LeagueHome() {
               <button className="btn ghost" onClick={() => copyViewerLink(l.id)}>
                 {copied === l.id ? "✓ Copied!" : "Copy viewer link"}
               </button>
+              {isAdmin && <button className="btn ghost" onClick={() => renameLeague(l.id, l.name)}>✏️ Rename</button>}
               {isAdmin && <button className="btn ghost" onClick={() => exportLeagueData(l.id, l.name)}>📥 Backup</button>}
               {isAdmin && <button className="btn ghost" style={{ color: "var(--pink)", borderColor: "rgba(255,126,182,.3)" }} onClick={() => deleteLeague(l.id, l.name)}>Delete</button>}
               <button className="btn" onClick={() => window.location.href = `?league=${l.id}${isAdmin ? "&admin=1" : ""}`}>Open →</button>
