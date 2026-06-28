@@ -1,0 +1,31 @@
+name: Sync NFL scores to Firestore
+
+# Runs every 15 minutes to cache fresh ESPN standings into Firestore so
+# viewers see scores update on game days without anyone clicking. GitHub may
+# delay scheduled runs during peak load, so treat timing as "within ~15-30 min".
+# Also runnable on demand from the Actions tab.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+# Avoid overlapping runs if one is slow.
+concurrency:
+  group: sync-scores
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install deps
+        working-directory: scripts
+        run: npm install --no-audit --no-fund
+      - name: Pull ESPN scores and write to Firestore
+        run: node scripts/sync-scores.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
