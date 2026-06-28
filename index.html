@@ -229,6 +229,16 @@ function fsSubscribe(leagueId, onData) {
   );
 }
 
+// The leagues collection is the single source of truth for which leagues exist.
+// Lists every league for the home screen so any visitor sees them all.
+async function fsLoadLeagueList() {
+  const snap = await db.collection("leagues").get();
+  return snap.docs.map(d => {
+    const data = d.data() || {};
+    return { id: d.id, name: data.name || "Untitled league", players: data.players || [], createdAt: data.createdAt || 0 };
+  }).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+}
+
 // ---- URL routing ----
 const _params  = new URLSearchParams(window.location.search);
 const LEAGUE_ID = _params.get("league");
@@ -514,22 +524,40 @@ function Root() {
 
 // ========== League Home ==========
 function LeagueHome() {
-  const [leagues, setLeagues] = useState(loadLeagues);
+  const [leagues, setLeagues] = useState(loadLeagues); // localStorage cache → instant paint
+  const [loadingList, setLoadingList] = useState(true);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPlayers, setNewPlayers] = useState(["","","",""]);
   const [copied, setCopied] = useState(null);
   const [importing, setImporting] = useState(false);
   const importFileRef = useRef(null);
-  const hasLegacy = !!localStorage.getItem(LEGACY_KEY) && !leagues.some(l => l.legacy);
+
+  // Auth — only the admin can create/delete; everyone else just browses.
+  const [authUser, setAuthUser] = useState(() => auth.currentUser);
+  useEffect(() => auth.onAuthStateChanged(setAuthUser), []);
+  const isAdmin = !!authUser && (ADMIN_CONFIGURED ? authUser.uid === ADMIN_UID : true);
+  function signIn()  { auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e => alert("Sign-in failed: " + e.message)); }
+  function signOut() { auth.signOut(); }
+
+  // The leagues collection in Firestore is the source of truth for the list.
+  useEffect(() => {
+    fsLoadLeagueList()
+      .then(list => { setLeagues(list); saveLeagues(list); })
+      .catch(() => {})
+      .finally(() => setLoadingList(false));
+  }, []);
+
+  const hasLegacy = isAdmin && !!localStorage.getItem(LEGACY_KEY) && !leagues.some(l => l.legacy);
 
   async function create() {
     const name    = newName.trim();
     const players = newPlayers.map(p => p.trim()).filter(Boolean);
     if (!name || players.length !== 4) return;
     const id      = genId();
-    const entry   = { id, name, players, createdAt: Date.now() };
-    const st      = emptyState(players);
+    const createdAt = Date.now();
+    const entry   = { id, name, players, createdAt };
+    const st      = { ...emptyState(players), name, createdAt }; // name/createdAt live in the league doc
     const updated = [...leagues, entry];
     saveLeagues(updated);
     saveLocalState(id, st);
@@ -544,8 +572,9 @@ function LeagueHome() {
       if (!st.records || !st.roster) return;
       const players = Object.keys(st.roster);
       const id      = genId();
-      const stWithPlayers = { ...st, players };
-      const entry   = { id, name: "Trash & Treasures 2024", players, createdAt: Date.now(), legacy: true };
+      const createdAt = Date.now();
+      const stWithPlayers = { ...st, players, name: "Trash & Treasures 2024", createdAt };
+      const entry   = { id, name: "Trash & Treasures 2024", players, createdAt, legacy: true };
       const updated = [...leagues, entry];
       saveLeagues(updated);
       saveLocalState(id, stWithPlayers);
@@ -578,11 +607,13 @@ function LeagueHome() {
       const { leagueId, leagueName, state } = backup;
       const existing = leagues.find(l => l.id === leagueId);
       if (existing && !confirm(`League "${leagueName}" already exists. Overwrite it?`)) { setImporting(false); return; }
-      const entry = { id: leagueId, name: leagueName, players: state.players || [], createdAt: Date.now() };
+      const createdAt = state.createdAt || Date.now();
+      const stToSave = { ...state, name: leagueName, createdAt };
+      const entry = { id: leagueId, name: leagueName, players: state.players || [], createdAt };
       const updated = existing ? leagues.map(l => l.id === leagueId ? entry : l) : [...leagues, entry];
       saveLeagues(updated);
-      saveLocalState(leagueId, state);
-      await fsSave(leagueId, state).catch(() => {});
+      saveLocalState(leagueId, stToSave);
+      await fsSave(leagueId, stToSave).catch(() => {});
       setLeagues(updated);
       alert(`✓ Restored "${leagueName}"`);
     } catch(err) {
@@ -595,9 +626,14 @@ function LeagueHome() {
 
   return (
     <div>
-      <div style={{ marginBottom: 28 }}>
-        <h1>🗑️ Trash &amp; 💎 Treasures</h1>
-        <div className="sub">Your leagues</div>
+      <div className="row between" style={{ marginBottom: 28, flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <h1>🗑️ Trash &amp; 💎 Treasures</h1>
+          <div className="sub">{isAdmin ? "Manage leagues" : "Browse leagues"}{loadingList && leagues.length > 0 ? " · refreshing…" : ""}</div>
+        </div>
+        {isAdmin
+          ? <button className="btn ghost" onClick={signOut}>Sign out</button>
+          : <button className="btn ghost" onClick={signIn}>Admin sign in</button>}
       </div>
 
       <input ref={importFileRef} type="file" accept=".json" onChange={handleImport} style={{ display: "none" }} />
@@ -610,7 +646,7 @@ function LeagueHome() {
         </div>
       )}
 
-      {leagues.length > 0 && (
+      {isAdmin && leagues.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <button className="btn ghost" onClick={() => importFileRef.current?.click()} disabled={importing}>
             {importing ? "Importing…" : "📥 Restore from backup"}
@@ -618,8 +654,14 @@ function LeagueHome() {
         </div>
       )}
 
-      {leagues.length === 0 && !hasLegacy && (
-        <div className="sub" style={{ marginBottom: 20 }}>No leagues yet. Create one to get started.</div>
+      {loadingList && leagues.length === 0 && (
+        <div className="sub" style={{ marginBottom: 20 }}>Loading leagues…</div>
+      )}
+
+      {!loadingList && leagues.length === 0 && !hasLegacy && (
+        <div className="sub" style={{ marginBottom: 20 }}>
+          {isAdmin ? "No leagues yet. Create one to get started." : "No leagues yet. Check back once the admin sets one up."}
+        </div>
       )}
 
       {leagues.map(l => (
@@ -633,16 +675,16 @@ function LeagueHome() {
               <button className="btn ghost" onClick={() => copyViewerLink(l.id)}>
                 {copied === l.id ? "✓ Copied!" : "Copy viewer link"}
               </button>
-              <button className="btn ghost" onClick={() => exportLeagueData(l.id, l.name)}>📥 Backup</button>
-              <button className="btn ghost" style={{ color: "var(--pink)", borderColor: "rgba(255,126,182,.3)" }} onClick={() => deleteLeague(l.id, l.name)}>Delete</button>
-              <button className="btn" onClick={() => window.location.href = `?league=${l.id}&admin=1`}>Open →</button>
+              {isAdmin && <button className="btn ghost" onClick={() => exportLeagueData(l.id, l.name)}>📥 Backup</button>}
+              {isAdmin && <button className="btn ghost" style={{ color: "var(--pink)", borderColor: "rgba(255,126,182,.3)" }} onClick={() => deleteLeague(l.id, l.name)}>Delete</button>}
+              <button className="btn" onClick={() => window.location.href = `?league=${l.id}${isAdmin ? "&admin=1" : ""}`}>Open →</button>
             </div>
           </div>
         </div>
       ))}
 
       <div style={{ marginTop: 20 }}>
-        {!creating ? (
+        {!isAdmin ? null : !creating ? (
           <button className="btn" onClick={() => setCreating(true)}>+ New league</button>
         ) : (
           <div className="panel" style={{ maxWidth: 480 }}>
@@ -766,7 +808,8 @@ function ReplayBar({ week, setWeek, season, setSeason, loading, error, onExit })
 
 // ========== App ==========
 function App({ initState, leagueInfo, remoteUpdate }) {
-  const [st, setSt]       = useState(initState);
+  // Seed the name from the local cache if the doc predates name storage (backfills on next save)
+  const [st, setSt]       = useState(() => initState.name ? initState : { ...initState, name: leagueInfo?.name });
   const [tab, setTab]     = useState("dashboard");
   const [syncStatus, setSyncStatus] = useState("saved");
 
@@ -878,7 +921,8 @@ function App({ initState, leagueInfo, remoteUpdate }) {
     setSt(s => ({ ...s, records }));
   }
 
-  function commitSeason(newState) { setSt(newState); setTab("dashboard"); } // newState has no draft → clears the live board
+  // Keep the league's identity (name/createdAt) and drop draft → clears the live board
+  function commitSeason(newState) { setSt(s => ({ ...newState, name: s.name, createdAt: s.createdAt })); setTab("dashboard"); }
   function syncDraft(d) { setSt(s => ({ ...s, draft: d })); }
 
   function enterReplay() { setReplayMode(true); setReplaySeason(2025); setReplayWeek(0); setReplayRecords(null); setTab("dashboard"); }
@@ -890,7 +934,7 @@ function App({ initState, leagueInfo, remoteUpdate }) {
     navigator.clipboard.writeText(viewerUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   }
 
-  const leagueName = leagueInfo?.name || "Trash & Treasures";
+  const leagueName = st.name || leagueInfo?.name || "Trash & Treasures";
   const syncLabel = { saved: "Saved", syncing: "Saving…", error: "Sync error" }[syncStatus];
   const syncClass = { saved: "saved", syncing: "syncing", error: "error" }[syncStatus];
   // Fall back to the read-only dashboard if editing isn't allowed (e.g. signed out mid-edit)
