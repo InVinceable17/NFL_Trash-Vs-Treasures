@@ -878,7 +878,8 @@ function App({ initState, leagueInfo, remoteUpdate }) {
     setSt(s => ({ ...s, records }));
   }
 
-  function commitSeason(newState) { setSt(newState); setTab("dashboard"); }
+  function commitSeason(newState) { setSt(newState); setTab("dashboard"); } // newState has no draft → clears the live board
+  function syncDraft(d) { setSt(s => ({ ...s, draft: d })); }
 
   function enterReplay() { setReplayMode(true); setReplaySeason(2025); setReplayWeek(0); setReplayRecords(null); setTab("dashboard"); }
   function exitReplay()  { setReplayMode(false); setReplayRecords(null); setReplayError(null); }
@@ -965,7 +966,8 @@ function App({ initState, leagueInfo, remoteUpdate }) {
         ? <Edit st={st} setSt={setSt} players={players} />
         : activeTab === "swap"
         ? <Swap st={st} setSt={setSt} players={players} replayRecords={replayMode ? replayRecords : null} />
-        : <Draft commitSeason={commitSeason} players={players} leagueId={LEAGUE_ID} />}
+        : <Draft commitSeason={commitSeason} players={players} leagueId={LEAGUE_ID}
+                 initialDraft={st.draft} syncDraft={syncDraft} />}
     </div>
   );
 }
@@ -1010,8 +1012,10 @@ function Section({ section, label, records }) {
 }
 
 function Dashboard({ st, ranking, players }) {
+  const draftLive = st.draft && (st.draft.phase === "draft" || st.draft.phase === "review");
   return (
     <div>
+      {draftLive && <DraftLive draft={st.draft} players={players} />}
       <div className="dash">
         {players.map(p => {
           const data = st.roster[p];
@@ -1447,15 +1451,42 @@ function DraftRosterPreview({ picks, order, current }) {
   );
 }
 
-function Draft({ commitSeason, players, leagueId }) {
-  const [draft, setDraft] = useState(() => loadDraft(leagueId) || { phase: "order", order: [...players], picks: [] });
+// Read-only live draft board shown to viewers (and on the admin's dashboard)
+// while a draft is in progress. Fed straight from the synced st.draft.
+function DraftLive({ draft, players }) {
+  const order = (draft.order && draft.order.length) ? draft.order : players;
+  const totalPicks = ROUNDS * players.length;
+  const pickIndex  = draft.picks.length;
+  const current    = draft.phase === "draft" && pickIndex < totalPicks ? snakePlayer(order, pickIndex) : null;
+  const round      = Math.floor(pickIndex / players.length) + 1;
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div className="pickbar" style={{ borderColor: "var(--accent)" }}>
+        <div>
+          <div className="who">{draft.phase === "review" ? "✅ Draft complete" : `🟢 ${current} on the clock`}</div>
+          <div className="meta">
+            {draft.phase === "review"
+              ? "Waiting for the admin to start the season…"
+              : `Live draft · Round ${round} of ${ROUNDS} · Pick ${pickIndex + 1} of ${totalPicks}`}
+          </div>
+        </div>
+        <span className="replay-badge">🔴 LIVE</span>
+      </div>
+      <DraftRosterPreview picks={draft.picks} order={order} current={current} />
+    </div>
+  );
+}
+
+function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft }) {
+  const [draft, setDraft] = useState(() => initialDraft || loadDraft(leagueId) || { phase: "order", order: [...players], picks: [] });
   const [teamData, setTeamData] = useState(null);
   const [tdLoading, setTdLoading] = useState(true);
   const [tdError, setTdError] = useState(null);
   const [dragPlayer, setDragPlayer] = useState(null);
   const dragFromIdx = useRef(null);
 
-  useEffect(() => { localStorage.setItem(draftKey(leagueId), JSON.stringify(draft)); }, [draft, leagueId]);
+  // Push every draft change up into shared state → Firestore → viewers watch live
+  useEffect(() => { syncDraft(draft); }, [draft]);
 
   function loadESPN() {
     setTdLoading(true); setTdError(null);
