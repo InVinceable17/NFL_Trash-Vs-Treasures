@@ -56,6 +56,11 @@
   tr.swap-wk12 td.tm { border-left-color: var(--teal); }
   tr.locked td { color: var(--muted); font-style: italic; }
   tr.locked td.tm { border-left-color: transparent; }
+  /* Tie banked (swapped-out) rows to their swap window, matching the swapped-in colors */
+  tr.locked.lk-wk6 td.tm  { border-left-color: var(--pink); }
+  tr.locked.lk-wk12 td.tm { border-left-color: var(--teal); }
+  .lockrow.lk-wk6 td  { color: var(--pink); }
+  .lockrow.lk-wk12 td { color: var(--teal); }
   .lockrow td { font-size: 8.5px; text-transform: uppercase; letter-spacing: .5px; color: #6b7280; padding: 5px 6px 1px; text-align: left; border-top: 1px solid var(--line); }
   .col-foot { margin-top: auto; padding: 9px 12px; border-top: 2px solid var(--line); display: flex; align-items: center; justify-content: space-between; background: var(--panel-2); }
   .rankbadge { font-weight: 800; font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--line); }
@@ -1089,10 +1094,12 @@ function Section({ section, label, records }) {
               </tr>
             );
           })}
-          {section.locked.map(([team, w, l, win], i) => (
+          {section.locked.map(([team, w, l, win], i) => {
+            const lk = win === "Weeks 1-6" ? " lk-wk6" : win === "Weeks 7-12" ? " lk-wk12" : "";
+            return (
             <React.Fragment key={"l"+i}>
-              <tr className="lockrow"><td colSpan="4">🔒 {win} performance (locked)</td></tr>
-              <tr className="locked">
+              <tr className={"lockrow" + lk}><td colSpan="4">🔒 {win} performance (locked)</td></tr>
+              <tr className={"locked" + lk}>
                 <td className="tm" title={team}>
                   {TEAM_ABBREV[team] && <img className="team-logo-sm" src={teamLogo(team)} alt="" />}{team}
                 </td>
@@ -1100,7 +1107,8 @@ function Section({ section, label, records }) {
                 <td className="pts">{lockedPts(label, w, l)}</td>
               </tr>
             </React.Fragment>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </React.Fragment>
