@@ -36,6 +36,59 @@ async function fetchTeamData(season) {
   return out;
 }
 
+// Per-week W/L deltas for one week: { "Team Name": [wins, losses] }
+async function fetchWeekScores(season, week) {
+  const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${week}&dates=${season}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`ESPN ${res.status} wk${week}`);
+  const data = await res.json();
+  const deltas = {};
+  for (const event of (data.events || [])) {
+    const comp = event.competitions?.[0];
+    if (!comp?.status?.type?.completed) continue;
+    for (const c of (comp.competitors || [])) {
+      const name = c.team?.displayName;
+      if (!name) continue;
+      if (!deltas[name]) deltas[name] = [0, 0];
+      if (c.winner) deltas[name][0]++; else deltas[name][1]++;
+    }
+  }
+  return deltas;
+}
+
+// Real per-window records: { "Weeks 1-6": {team:[w,l]}, "Weeks 7-12": {team:[w,l]} }
+async function fetchWindowRecords(season) {
+  const ranges = { "Weeks 1-6": [1, 6], "Weeks 7-12": [7, 12] };
+  const out = { "Weeks 1-6": {}, "Weeks 7-12": {} };
+  for (const [period, [a, b]] of Object.entries(ranges)) {
+    for (let w = a; w <= b; w++) {
+      const deltas = await fetchWeekScores(season, w);
+      for (const [team, [wins, losses]] of Object.entries(deltas)) {
+        if (!out[period][team]) out[period][team] = [0, 0];
+        out[period][team][0] += wins;
+        out[period][team][1] += losses;
+      }
+    }
+  }
+  return out;
+}
+
+// Regenerate banked (locked) values from real per-window results. Roster is in
+// Firestore format (locked rows are objects {team,w,l,period}).
+function recomputeLocked(roster, windows) {
+  const out = JSON.parse(JSON.stringify(roster || {}));
+  for (const pr of Object.values(out)) {
+    if (!pr) continue;
+    for (const sec of ["treasures", "trash"]) {
+      pr[sec].locked = (pr[sec]?.locked || []).map(lk => {
+        const rec = windows[lk.period] && windows[lk.period][lk.team];
+        return rec ? { team: lk.team, w: rec[0], l: rec[1], period: lk.period } : lk;
+      });
+    }
+  }
+  return out;
+}
+
 // Subtract banked swap periods (stored on roster locked rows) from cumulative
 // totals, so records reflect only the current active period — same as the app.
 function computeAdjusted(cumulative, roster) {
@@ -62,18 +115,19 @@ function computeAdjusted(cumulative, roster) {
 
 async function main() {
   const snap = await db.collection("leagues").get();
-  const cache = {}; // season -> cumulative (fetch each season once)
+  const cumCache = {};    // season -> cumulative standings
+  const windowCache = {}; // season -> per-window records
   let updated = 0, skipped = 0;
 
   for (const doc of snap.docs) {
     const data = doc.data() || {};
     const season = data.season || DEFAULT_SEASON;
 
-    if (!(season in cache)) {
-      try { cache[season] = await fetchTeamData(season); }
-      catch (e) { console.log(`Season ${season} fetch failed: ${e.message}`); cache[season] = {}; }
+    if (!(season in cumCache)) {
+      try { cumCache[season] = await fetchTeamData(season); }
+      catch (e) { console.log(`Season ${season} standings fetch failed: ${e.message}`); cumCache[season] = {}; }
     }
-    const cumulative = cache[season];
+    const cumulative = cumCache[season];
     const games = Object.values(cumulative).reduce((a, [w, l]) => a + w + l, 0);
 
     // Guard: never overwrite good data with an unstarted/empty season
@@ -83,8 +137,15 @@ async function main() {
       continue;
     }
 
-    const records = computeAdjusted(cumulative, data.roster);
-    await doc.ref.update({ records, lastSyncedAt: Date.now() });
+    if (!(season in windowCache)) {
+      try { windowCache[season] = await fetchWindowRecords(season); }
+      catch (e) { console.log(`Season ${season} per-week fetch failed: ${e.message}`); windowCache[season] = { "Weeks 1-6": {}, "Weeks 7-12": {} }; }
+    }
+
+    // Regenerate banked values from real games, then derive active records.
+    const roster = recomputeLocked(data.roster, windowCache[season]);
+    const records = computeAdjusted(cumulative, roster);
+    await doc.ref.update({ roster, records, lastSyncedAt: Date.now() });
     updated++;
     console.log(`Updated ${doc.id} (season ${season})`);
   }

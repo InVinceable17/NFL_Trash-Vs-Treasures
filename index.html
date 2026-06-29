@@ -522,16 +522,52 @@ function computeAdjustedRecords(replayRecords, replayRoster, players) {
   return adjusted;
 }
 
-// Fetch live ESPN standings for a season and return active-period records
-// (cumulative minus banked swap periods). Returns null if the season has no
-// completed games yet — callers must treat null as "don't overwrite".
-async function fetchAdjustedRecords(season, roster, players) {
+// Sum ESPN per-week results into each swap window's real record:
+//   { "Weeks 1-6": {team:[w,l]}, "Weeks 7-12": {team:[w,l]} }
+// These windows are always complete by the time a locked row exists, so the
+// results are immutable and a caller can cache them for the session.
+async function fetchWindowRecords(season) {
+  const ranges = { "Weeks 1-6": [1, 6], "Weeks 7-12": [7, 12] };
+  const out = { "Weeks 1-6": {}, "Weeks 7-12": {} };
+  for (const [period, [a, b]] of Object.entries(ranges)) {
+    for (let w = a; w <= b; w++) {
+      const deltas = await fetchWeekScores(season, w);
+      for (const [team, [wins, losses]] of Object.entries(deltas)) {
+        if (!out[period][team]) out[period][team] = [0, 0];
+        out[period][team][0] += wins;
+        out[period][team][1] += losses;
+      }
+    }
+  }
+  return out;
+}
+
+// Full ESPN sync: regenerate banked (locked) values from each team's real
+// window performance, and active records as cumulative minus those windows.
+// Returns { roster, records, windows } — or null if the season has no
+// completed games yet (callers treat null as "don't overwrite"). Pass a
+// cached `windows` to skip the per-week refetch.
+async function computeEspnSync(season, roster, players, windowsCache) {
   const data = await fetchTeamData(season);
   const cumulative = {};
   Object.entries(data).forEach(([team, d]) => { cumulative[team] = [d.w || 0, d.l || 0]; });
   const games = Object.values(cumulative).reduce((a, [w, l]) => a + w + l, 0);
   if (!Object.keys(cumulative).length || games === 0) return null;
-  return computeAdjustedRecords(cumulative, roster, players);
+
+  const windows = windowsCache || await fetchWindowRecords(season);
+  const newRoster = JSON.parse(JSON.stringify(roster));
+  for (const p of players) {
+    const pr = newRoster[p];
+    if (!pr) continue;
+    for (const sec of ["treasures", "trash"]) {
+      pr[sec].locked = (pr[sec].locked || []).map(([team, w, l, period]) => {
+        const rec = windows[period] && windows[period][team];
+        return rec ? [team, rec[0], rec[1], period] : [team, w, l, period];
+      });
+    }
+  }
+  const records = computeAdjustedRecords(cumulative, newRoster, players);
+  return { roster: newRoster, records, windows };
 }
 
 // ========== Root ==========
@@ -885,22 +921,28 @@ function App({ initState, leagueInfo, remoteUpdate }) {
     return () => clearTimeout(t);
   }, [st]);
 
-  // Admin browser auto-sync: pull live ESPN records on open and every 3 min
-  // while the tab stays open. Silently caches to Firestore for viewers. The
-  // scheduled GitHub Action covers the times no admin browser is open.
+  // Admin browser auto-sync: pull live ESPN data on open and every 3 min while
+  // the tab stays open. Regenerates banked values + active records and caches
+  // to Firestore for viewers. The scheduled GitHub Action covers the rest.
+  const windowsRef = useRef(null); // { season, windows } — immutable completed windows, cached for the session
   useEffect(() => {
     if (!canEdit || replayMode) return;
+    const curSeason = st.season || ESPN_SEASON;
     let cancelled = false;
-    function run() {
-      const cur = stRef.current;
-      fetchAdjustedRecords(cur.season || ESPN_SEASON, cur.roster, players)
-        .then(adj => { if (!cancelled && adj) { setSt(s => ({ ...s, records: { ...s.records, ...adj } })); setLastSync(Date.now()); } })
-        .catch(() => {});
+    async function run() {
+      try {
+        const cache = (windowsRef.current && windowsRef.current.season === curSeason) ? windowsRef.current.windows : null;
+        const res = await computeEspnSync(curSeason, stRef.current.roster, players, cache);
+        if (cancelled || !res) return;
+        windowsRef.current = { season: curSeason, windows: res.windows };
+        setSt(s => ({ ...s, roster: res.roster, records: { ...s.records, ...res.records } }));
+        setLastSync(Date.now());
+      } catch (e) {}
     }
     run();
     const id = setInterval(run, 3 * 60 * 1000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [canEdit, replayMode, players]);
+  }, [canEdit, replayMode, players, st.season]);
 
   // Fetch and accumulate records up to the selected replay week
   useEffect(() => {
@@ -1171,7 +1213,7 @@ function Edit({ st, setSt, players, leagueId, leagueName }) {
   const season = st.season || ESPN_SEASON;
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState(null);          // { type: "ok"|"err"|"info", text }
-  const [undoRecords, setUndoRecords] = useState(null);  // pre-sync snapshot for one-click revert
+  const [undoSnapshot, setUndoSnapshot] = useState(null);  // { records, roster } pre-sync snapshot
 
   function setSeason(yr) { setSt(s => ({ ...s, season: Number(yr) })); setSyncMsg(null); }
 
@@ -1180,29 +1222,28 @@ function Edit({ st, setSt, players, leagueId, leagueName }) {
   async function syncFromESPN() {
     setSyncing(true); setSyncMsg(null);
     try {
-      const adjusted = await fetchAdjustedRecords(season, st.roster, players);
+      const res = await computeEspnSync(season, st.roster, players, null);
       // Guard: don't let an unstarted/empty season wipe good data
-      if (!adjusted) {
-        setSyncMsg({ type: "err", text: `ESPN shows no completed games for ${season} yet — nothing synced. Your records were left as-is.` });
+      if (!res) {
+        setSyncMsg({ type: "err", text: `ESPN shows no completed games for ${season} yet — nothing synced. Your data was left as-is.` });
         return;
       }
-      const n = Object.keys(adjusted).length;
-      if (!confirm(`Pull ${season} records from ESPN?\n\nUpdates W/L for ${n} teams from live standings. Rosters and locked/banked rows are untouched. You can Undo right after.`)) return;
-      setUndoRecords(JSON.parse(JSON.stringify(st.records)));
-      setSt(s => ({ ...s, records: { ...s.records, ...adjusted } }));
-      setSyncMsg({ type: "ok", text: `✓ Synced ${season} records for ${n} teams.` });
+      if (!confirm(`Pull ${season} from ESPN?\n\nUpdates active records AND recomputes banked (locked) values from real per-window game results. You can Undo right after.`)) return;
+      setUndoSnapshot({ records: JSON.parse(JSON.stringify(st.records)), roster: JSON.parse(JSON.stringify(st.roster)) });
+      setSt(s => ({ ...s, roster: res.roster, records: { ...s.records, ...res.records } }));
+      setSyncMsg({ type: "ok", text: `✓ Synced ${season}: active records and banked values from real games.` });
     } catch (e) {
-      setSyncMsg({ type: "err", text: `ESPN sync failed: ${e.message || e}. Records unchanged.` });
+      setSyncMsg({ type: "err", text: `ESPN sync failed: ${e.message || e}. Data unchanged.` });
     } finally {
       setSyncing(false);
     }
   }
 
   function undoSync() {
-    if (!undoRecords) return;
-    setSt(s => ({ ...s, records: undoRecords }));
-    setUndoRecords(null);
-    setSyncMsg({ type: "info", text: "Reverted to pre-sync records." });
+    if (!undoSnapshot) return;
+    setSt(s => ({ ...s, records: undoSnapshot.records, roster: undoSnapshot.roster }));
+    setUndoSnapshot(null);
+    setSyncMsg({ type: "info", text: "Reverted to pre-sync data." });
   }
 
   function setRec(team, idx, val) {
@@ -1230,13 +1271,13 @@ function Edit({ st, setSt, players, leagueId, leagueName }) {
             <button className="btn" onClick={syncFromESPN} disabled={syncing}>
               {syncing ? "Syncing…" : `⟳ Pull ${season} records from ESPN`}
             </button>
-            {undoRecords && <button className="btn ghost" onClick={undoSync}>↩ Undo sync</button>}
+            {undoSnapshot && <button className="btn ghost" onClick={undoSync}>↩ Undo sync</button>}
           </div>
           <button className="btn ghost" onClick={backupNow} title="Download a restore-compatible JSON snapshot">⬇️ Backup now</button>
         </div>
         {syncMsg && <div style={{ marginTop: 10, fontSize: 13, color: msgColor }}>{syncMsg.text}</div>}
         <div className="sub" style={{ marginTop: 8 }}>
-          Auto-sync pulls live W/L from ESPN for the selected season. It only touches active team records (never rosters or banked rows), warns instead of wiping if the season hasn't started, and can be undone. Back up first if you want a durable safety net.
+          Auto-sync pulls live W/L from ESPN for the selected season: it sets active team records and regenerates banked (locked) values from each team's real per-window performance. It warns instead of wiping if the season hasn't started, and can be undone. Back up first if you want a durable safety net.
         </div>
       </div>
       <div className="sub" style={{ marginBottom: 14 }}>Or update active team records by hand below. Locked rows are banked swap history — edit only to correct.</div>
