@@ -1470,6 +1470,7 @@ function Swap({ st, setSt, players, replayRecords }) {
       return out;
     });
     if (!lines.length) return;
+    if (incompletePlayers.length) { alert(`Each swap must move one Treasure AND one Trash so every player stays 4 & 4.\n\nFinish or clear: ${incompletePlayers.join(", ")}`); return; }
     if (!confirm(`Apply ${winInfo.label} swaps?\n\n${lines.join("\n")}\n\nBanked W/L will be locked. Cannot be undone.`)) return;
 
     setSt(prev => applySwaps(prev, selections, win, winInfo.period, replayRecords || prev.records, players));
@@ -1478,10 +1479,13 @@ function Swap({ st, setSt, players, replayRecords }) {
   }
 
   const hasSelection = players.some(p => selections[p].treasureOut || selections[p].trashOut);
-  const selectedCount = players.filter(p => selections[p].treasureOut || selections[p].trashOut).length;
+  const selectedCount = players.filter(p => selections[p].treasureOut && selections[p].trashOut).length;
+  // A swap must be paired (one out of each category) to keep every player at 4 & 4.
+  const incompletePlayers = players.filter(p => !!selections[p].treasureOut !== !!selections[p].trashOut);
+  const canApply = hasSelection && incompletePlayers.length === 0;
 
-  // Live projected state + standings for the preview board
-  const previewState = hasSelection ? applySwaps(st, selections, win, winInfo.period, liveRecords, players) : null;
+  // Live projected state + standings for the preview board (only when valid)
+  const previewState = canApply ? applySwaps(st, selections, win, winInfo.period, liveRecords, players) : null;
   function rankingFor(state) {
     const totals = {}; players.forEach(p => totals[p] = totalScore(p, state));
     const order = [...players].sort((a, b) => totals[b] - totals[a]);
@@ -1598,24 +1602,26 @@ function Swap({ st, setSt, players, replayRecords }) {
       <WindowTabs />
       <div className="row between" style={{ marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <div className="sub">
-          Tap a team to flip its category for <strong>{winInfo.label}</strong>. Tap again to deselect.
+          A swap moves one Treasure <strong>and</strong> one Trash for <strong>{winInfo.label}</strong> — so every player stays 4 &amp; 4. Tap to select, tap again to deselect.
           {replayRecords && <span style={{ color: "var(--accent)", marginLeft: 8 }}>Using replay records for banking.</span>}
         </div>
-        <div className="sub">{selectedCount} of {players.length} players have a swap selected</div>
+        <div className="sub">{selectedCount} of {players.length} players have a complete swap</div>
       </div>
       <div className="dash">
         {players.map(p => {
           const pr  = st.roster[p];
           if (!pr) return null;
           const sel = selections[p];
-          const hasSel = !!(sel.treasureOut || sel.trashOut);
+          const both = !!(sel.treasureOut && sel.trashOut);
+          const partial = !!(sel.treasureOut || sel.trashOut) && !both;
+          const flag = both ? { t: "● swap ready", c: "var(--accent)" }
+                     : partial ? { t: "⚠ pick the other side", c: "var(--pink)" }
+                     : { t: "○ no swap", c: "var(--muted)" };
           return (
             <div className="col" key={p}>
               <div className="col-head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span>{p}</span>
-                <span style={{ fontSize: 10, fontWeight: 700, color: hasSel ? "var(--accent)" : "var(--muted)" }}>
-                  {hasSel ? "● will swap" : "○ no swap yet"}
-                </span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: flag.c }}>{flag.t}</span>
               </div>
 
               <div className="sec-head treasure">💎 Treasures → tap to move to Trash</div>
@@ -1636,8 +1642,9 @@ function Swap({ st, setSt, players, replayRecords }) {
                 ))}
               </div>
 
-              {hasSel && (
+              {(sel.treasureOut || sel.trashOut) && (
                 <div style={{ padding: "8px 12px", borderTop: "1px solid var(--line)", fontSize: 11.5, color: "var(--muted)" }}>
+                  {partial && <div style={{ color: "var(--pink)", marginBottom: 5 }}>Pick one from the {sel.treasureOut ? "Trash" : "Treasures"} side to complete this swap.</div>}
                   {sel.treasureOut && (
                     <div style={{ marginBottom: sel.trashOut ? 5 : 0 }}>
                       {impactLine(sel.treasureOut, "treasure")}{" "}
@@ -1658,8 +1665,13 @@ function Swap({ st, setSt, players, replayRecords }) {
       </div>
 
       <div className="row" style={{ gap: 12, marginTop: 20 }}>
-        <button className="btn" onClick={commitSwap} disabled={!hasSelection}>Apply swaps →</button>
+        <button className="btn" onClick={commitSwap} disabled={!canApply}>Apply swaps →</button>
         {!hasSelection && <span className="sub">Tap teams above to select swaps</span>}
+        {incompletePlayers.length > 0 && (
+          <span className="sub" style={{ color: "var(--pink)" }}>
+            ⚠ Finish the pair for {incompletePlayers.join(", ")} — each swap moves one Treasure and one Trash.
+          </span>
+        )}
       </div>
 
       {previewState && (
