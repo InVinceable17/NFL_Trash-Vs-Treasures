@@ -1354,6 +1354,35 @@ function SwapTeamRow({ team, records, selected, label, onClick }) {
   );
 }
 
+// Pure: returns the state after applying the given selections at a window.
+// Shared by the live preview and the actual commit so they can't drift.
+function applySwaps(prev, selections, win, period, source, players) {
+  const roster  = JSON.parse(JSON.stringify(prev.roster));
+  const records = { ...prev.records };
+  for (const player of players) {
+    const sel = selections[player];
+    const pr  = roster[player];
+    if (!sel || !pr) continue;
+    if (sel.treasureOut) {
+      const team = sel.treasureOut;
+      const [w, l] = source[team] || [0, 0];
+      pr.treasures.locked.push([team, w, l, period]);
+      pr.treasures.active = pr.treasures.active.filter(([t]) => t !== team);
+      pr.trash.active.push([team, win]);
+      records[team] = [0, 0];
+    }
+    if (sel.trashOut) {
+      const team = sel.trashOut;
+      const [w, l] = source[team] || [0, 0];
+      pr.trash.locked.push([team, w, l, period]);
+      pr.trash.active = pr.trash.active.filter(([t]) => t !== team);
+      pr.treasures.active.push([team, win]);
+      records[team] = [0, 0];
+    }
+  }
+  return { ...prev, roster, records };
+}
+
 function Swap({ st, setSt, players, replayRecords }) {
   const liveRecords = replayRecords || st.records;
 
@@ -1380,7 +1409,10 @@ function Swap({ st, setSt, players, replayRecords }) {
     setSelections(s => ({ ...s, [player]: { ...s[player], [field]: s[player][field] === team ? "" : team } }));
   }
 
+  // Checkpoint gating: the Week 12 window opens only after Week 6 swaps exist.
+  const wk12Locked = !doneWk6;
   function changeWindow(key) {
+    if (key === "wk12" && wk12Locked) return;
     setWin(key);
     setEditing(false);
     setSelections(Object.fromEntries(players.map(p => [p, { treasureOut: "", trashOut: "" }])));
@@ -1440,42 +1472,30 @@ function Swap({ st, setSt, players, replayRecords }) {
     if (!lines.length) return;
     if (!confirm(`Apply ${winInfo.label} swaps?\n\n${lines.join("\n")}\n\nBanked W/L will be locked. Cannot be undone.`)) return;
 
-    setSt(prev => {
-      const roster  = JSON.parse(JSON.stringify(prev.roster));
-      const records = { ...prev.records };
-      const source  = replayRecords || prev.records;
-
-      for (const player of players) {
-        const sel = selections[player];
-        const pr  = roster[player];
-
-        if (sel.treasureOut) {
-          const team = sel.treasureOut;
-          const [w, l] = source[team] || [0, 0];
-          pr.treasures.locked.push([team, w, l, winInfo.period]);
-          pr.treasures.active = pr.treasures.active.filter(([t]) => t !== team);
-          pr.trash.active.push([team, win]);
-          records[team] = [0, 0];
-        }
-
-        if (sel.trashOut) {
-          const team = sel.trashOut;
-          const [w, l] = source[team] || [0, 0];
-          pr.trash.locked.push([team, w, l, winInfo.period]);
-          pr.trash.active = pr.trash.active.filter(([t]) => t !== team);
-          pr.treasures.active.push([team, win]);
-          records[team] = [0, 0];
-        }
-      }
-
-      return { ...prev, roster, records };
-    });
-
+    setSt(prev => applySwaps(prev, selections, win, winInfo.period, replayRecords || prev.records, players));
     setSelections(Object.fromEntries(players.map(p => [p, { treasureOut: "", trashOut: "" }])));
     setEditing(false);
   }
 
   const hasSelection = players.some(p => selections[p].treasureOut || selections[p].trashOut);
+  const selectedCount = players.filter(p => selections[p].treasureOut || selections[p].trashOut).length;
+
+  // Live projected state + standings for the preview board
+  const previewState = hasSelection ? applySwaps(st, selections, win, winInfo.period, liveRecords, players) : null;
+  function rankingFor(state) {
+    const totals = {}; players.forEach(p => totals[p] = totalScore(p, state));
+    const order = [...players].sort((a, b) => totals[b] - totals[a]);
+    const rank = {}; order.forEach((p, i) => rank[p] = i + 1);
+    return { totals, rank, order };
+  }
+  // Plain-language description of one pending selection
+  function impactLine(team, from) {
+    const [w, l] = liveRecords[team] || [0, 0];
+    const pts = from === "treasure" ? w : l;
+    return from === "treasure"
+      ? `💎→🗑️ ${team} · locks ${pts} pt${pts !== 1 ? "s" : ""} (${w}W-${l}L), then scores losses`
+      : `🗑️→💎 ${team} · locks ${pts} pt${pts !== 1 ? "s" : ""} (${w}W-${l}L), then scores wins`;
+  }
 
   // Reconstruct swap decisions from roster markers + locked entries
   function getSwapSummary() {
@@ -1499,12 +1519,19 @@ function Swap({ st, setSt, players, replayRecords }) {
   }
 
   const WindowTabs = () => (
-    <div className="row" style={{ gap: 8, marginBottom: 20 }}>
-      {SWAP_WINDOWS.map(w => (
-        <button key={w.key} className={"btn" + (win === w.key ? "" : " ghost")} onClick={() => changeWindow(w.key)}>
-          {w.label} {done[w.key] ? "✓" : ""}
-        </button>
-      ))}
+    <div className="row" style={{ gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+      {SWAP_WINDOWS.map(w => {
+        const locked = w.key === "wk12" && wk12Locked;
+        return (
+          <button key={w.key}
+            className={"btn" + (win === w.key ? "" : " ghost")}
+            disabled={locked}
+            title={locked ? "Opens once the After Week 6 swaps are applied" : ""}
+            onClick={() => changeWindow(w.key)}>
+            {w.label} {done[w.key] ? "✓" : locked ? "🔒" : ""}
+          </button>
+        );
+      })}
     </div>
   );
 
@@ -1569,20 +1596,29 @@ function Swap({ st, setSt, players, replayRecords }) {
   return (
     <div>
       <WindowTabs />
-      <div className="sub" style={{ marginBottom: 16 }}>
-        Click a team to select it for swapping. Click again to deselect.
-        {replayRecords && <span style={{ color: "var(--accent)", marginLeft: 8 }}>Using replay records for banking.</span>}
+      <div className="row between" style={{ marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+        <div className="sub">
+          Tap a team to flip its category for <strong>{winInfo.label}</strong>. Tap again to deselect.
+          {replayRecords && <span style={{ color: "var(--accent)", marginLeft: 8 }}>Using replay records for banking.</span>}
+        </div>
+        <div className="sub">{selectedCount} of {players.length} players have a swap selected</div>
       </div>
       <div className="dash">
         {players.map(p => {
           const pr  = st.roster[p];
           if (!pr) return null;
           const sel = selections[p];
+          const hasSel = !!(sel.treasureOut || sel.trashOut);
           return (
             <div className="col" key={p}>
-              <div className="col-head">{p}</div>
+              <div className="col-head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span>{p}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: hasSel ? "var(--accent)" : "var(--muted)" }}>
+                  {hasSel ? "● will swap" : "○ no swap yet"}
+                </span>
+              </div>
 
-              <div className="sec-head treasure">💎 Treasures → click to move to Trash</div>
+              <div className="sec-head treasure">💎 Treasures → tap to move to Trash</div>
               <div style={{ padding: "4px 8px 8px" }}>
                 {pr.treasures.active.map(([team]) => (
                   <SwapTeamRow key={team} team={team} records={liveRecords} label="treasure"
@@ -1591,7 +1627,7 @@ function Swap({ st, setSt, players, replayRecords }) {
                 ))}
               </div>
 
-              <div className="sec-head trash">🗑️ Trash → click to move to Treasures</div>
+              <div className="sec-head trash">🗑️ Trash → tap to move to Treasures</div>
               <div style={{ padding: "4px 8px 8px" }}>
                 {pr.trash.active.map(([team]) => (
                   <SwapTeamRow key={team} team={team} records={liveRecords} label="trash"
@@ -1600,10 +1636,20 @@ function Swap({ st, setSt, players, replayRecords }) {
                 ))}
               </div>
 
-              {(sel.treasureOut || sel.trashOut) && (
-                <div style={{ padding: "8px 12px", borderTop: "1px solid var(--line)", fontSize: 12, color: "var(--muted)" }}>
-                  {sel.trashOut    && <div>🗑️→💎 {sel.trashOut}</div>}
-                  {sel.treasureOut && <div>💎→🗑️ {sel.treasureOut}</div>}
+              {hasSel && (
+                <div style={{ padding: "8px 12px", borderTop: "1px solid var(--line)", fontSize: 11.5, color: "var(--muted)" }}>
+                  {sel.treasureOut && (
+                    <div style={{ marginBottom: sel.trashOut ? 5 : 0 }}>
+                      {impactLine(sel.treasureOut, "treasure")}{" "}
+                      <a onClick={() => toggle(p, "treasureOut", sel.treasureOut)} style={{ color: "var(--accent)", cursor: "pointer" }}>clear</a>
+                    </div>
+                  )}
+                  {sel.trashOut && (
+                    <div>
+                      {impactLine(sel.trashOut, "trash")}{" "}
+                      <a onClick={() => toggle(p, "trashOut", sel.trashOut)} style={{ color: "var(--accent)", cursor: "pointer" }}>clear</a>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1613,8 +1659,18 @@ function Swap({ st, setSt, players, replayRecords }) {
 
       <div className="row" style={{ gap: 12, marginTop: 20 }}>
         <button className="btn" onClick={commitSwap} disabled={!hasSelection}>Apply swaps →</button>
-        {!hasSelection && <span className="sub">Click teams above to select swaps</span>}
+        {!hasSelection && <span className="sub">Tap teams above to select swaps</span>}
       </div>
+
+      {previewState && (
+        <div style={{ marginTop: 24, border: "1px solid var(--accent)", borderRadius: 12, padding: "14px 14px 4px" }}>
+          <div className="row between" style={{ marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+            <span className="replay-badge">👁 PREVIEW</span>
+            <span className="sub">How the board looks after applying — totals hold; teams move sections and lock their current points.</span>
+          </div>
+          <Dashboard st={{ ...previewState, draft: null }} ranking={rankingFor(previewState)} players={players} />
+        </div>
+      )}
     </div>
   );
 }
