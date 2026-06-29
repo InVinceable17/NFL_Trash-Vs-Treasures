@@ -837,6 +837,7 @@ function ReplayBar({ week, setWeek, season, setSeason, loading, error, onExit })
 function App({ initState, leagueInfo, remoteUpdate }) {
   // Seed the name from the local cache if the doc predates name storage (backfills on next save)
   const [st, setSt]       = useState(() => initState.name ? initState : { ...initState, name: leagueInfo?.name });
+  const players = st.players || SEED_PLAYERS; // declared up top so all effects can reference it
   const [tab, setTab]     = useState("dashboard");
   const [syncStatus, setSyncStatus] = useState("saved");
   const [lastSync, setLastSync] = useState(null); // timestamp of last successful ESPN auto-sync
@@ -940,8 +941,6 @@ function App({ initState, leagueInfo, remoteUpdate }) {
     load();
     return () => { cancelled = true; };
   }, [replayMode, replaySeason, replayWeek]);
-
-  const players = st.players || SEED_PLAYERS;
 
   // When replaying: reconstruct roster for the current week and compute
   // adjusted records (cumulative ESPN minus banked periods).
