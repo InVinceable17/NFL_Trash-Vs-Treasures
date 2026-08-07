@@ -79,14 +79,15 @@ async function fetchSeed() {
 // ---- Demo adaptations (source stays untouched; we transform a copy) ----
 function adapt(source) {
   return source
-    .replace('const LEAGUE_ID = _params.get("league");',
-             `const LEAGUE_ID = _params.get("league") || ${JSON.stringify(LEAGUE)};`)
-    .replace('const IS_ADMIN  = _params.get("admin") === "1"; // requests admin VIEW; editing also requires sign-in below',
-             `const IS_ADMIN  = ${ROLE === "admin"}; // preview role: ${ROLE}`)
+    // Route through an in-memory PREVIEW object instead of window.location —
+    // real navigation can break inside the Artifact sandbox. Starts at home.
+    .replace(/window\.location/g, "PREVIEW")
     .replace(/const teamLogo = t => \{[^}]*\};/,
              'const teamLogo = t => null; // logos dropped (Artifact CSP blocks espncdn)')
     .replace('async function computeEspnSync(season, roster, players, windowsCache) {',
-             'async function computeEspnSync(season, roster, players, windowsCache) {\n  return null; // offline preview: no live sync');
+             'async function computeEspnSync(season, roster, players, windowsCache) {\n  return null; // offline preview: no live sync')
+    .replace('ReactDOM.createRoot(document.getElementById("root")).render(<Root />);',
+             '(window.__root = ReactDOM.createRoot(document.getElementById("root"))).render(<Root />);');
 }
 
 const TEAMS = ["Philadelphia Eagles","Houston Texans","Pittsburgh Steelers","Seattle Seahawks","Buffalo Bills","Green Bay Packers","Los Angeles Chargers","Cincinnati Bengals","Detroit Lions","New England Patriots","Denver Broncos","Indianapolis Colts","Baltimore Ravens","San Francisco 49ers","Jacksonville Jaguars","Los Angeles Rams","Tennessee Titans","Carolina Panthers","Las Vegas Raiders","Washington Commanders","New Orleans Saints","Miami Dolphins","New York Jets","Atlanta Falcons","New York Giants","Dallas Cowboys","Tampa Bay Buccaneers","Arizona Cardinals","Cleveland Browns","Minnesota Vikings","Chicago Bears","Kansas City Chiefs"];
@@ -94,6 +95,24 @@ const TEAMS = ["Philadelphia Eagles","Houston Texans","Pittsburgh Steelers","Sea
 function bootstrap(seed) {
   return `
 (function(){ try{ var k='__t'; localStorage.setItem(k,'1'); localStorage.removeItem(k); }catch(e){ var m={}; try{ Object.defineProperty(window,'localStorage',{value:{getItem:function(k){return k in m?m[k]:null},setItem:function(k,v){m[k]=String(v)},removeItem:function(k){delete m[k]},clear:function(){m={}}},configurable:true}); }catch(_){} } })();
+
+// In-memory router standing in for window.location, so nav re-renders the app
+// client-side instead of doing a real navigation (unreliable in a sandbox).
+var PREVIEW = {
+  search: "", pathname: "/app", origin: "https://preview.local",
+  get href(){ return this.origin + this.pathname + this.search; },
+  set href(v){ this.go(String(v)); },
+  assign: function(v){ this.go(String(v)); },
+  go: function(url){
+    url = String(url).replace(this.origin, "");
+    var qi = url.indexOf("?");
+    if (qi === 0) { this.search = url; }
+    else if (qi > 0) { this.pathname = url.slice(0, qi) || "/app"; this.search = url.slice(qi); }
+    else { this.pathname = url || "/app"; this.search = ""; }
+    if (window.__reboot) window.__reboot();
+  }
+};
+window.PREVIEW = PREVIEW;
 
 var _seed = ${JSON.stringify({ [LEAGUE]: seed })};
 var _listeners = {};
@@ -148,30 +167,59 @@ ${css}
 <script>${react}</script>
 <script>${reactDom}</script>
 <script>${boot}</script>
-<script>${compiled}</script>
+<script>
+window.__reboot = function(){
+  try { if (window.__root) window.__root.unmount(); } catch(e){}
+  var old = document.getElementById("root");
+  if (old && old.parentNode) { var fresh = document.createElement("div"); fresh.id = "root"; old.parentNode.replaceChild(fresh, old); }
+  __bootApp();
+};
+function __bootApp(){
+${compiled}
+}
+__bootApp();
+</script>
 `;
 }
 
-// Render the output in jsdom and confirm the app actually mounts.
+// Render in jsdom, confirm the home screen mounts, then exercise the router
+// (home -> league -> back) to confirm navigation works client-side.
 function verify(content) {
   return new Promise((resolve, reject) => {
     const dom = new JSDOM(`<!doctype html><body>${content}</body>`, { runScripts: "dangerously", pretendToBeVisual: true, url: "https://preview.local/" });
+    const w = dom.window;
     const errs = [];
-    dom.window.addEventListener("error", e => errs.push((e.error && e.error.message) || e.message));
+    w.addEventListener("error", e => errs.push((e.error && e.error.message) || e.message));
+    const root = () => (w.document.getElementById("root") || {}).textContent || "";
+    const done = (fn) => { try { fn(); } finally { w.close(); } };
     setTimeout(() => {
-      const txt = (dom.window.document.getElementById("root") || {}).textContent || "";
-      dom.window.close();
-      if (txt.length < 100) return reject(new Error("app did not mount (empty #root)"));
-      if (errs.length)      return reject(new Error("runtime error: " + errs[0]));
-      resolve(txt.length);
-    }, 700);
+      const home = root();
+      if (home.length < 100) return done(() => reject(new Error("home did not mount")));
+      // Navigate into the league
+      w.PREVIEW.go(`?league=${LEAGUE}&admin=1`);
+      setTimeout(() => {
+        const league = root();
+        // Navigate back home
+        w.PREVIEW.go("/app");
+        setTimeout(() => {
+          const back = root();
+          done(() => {
+            if (errs.length) return reject(new Error("runtime error: " + errs[0]));
+            if (!/Standings|Treasures/.test(league)) return reject(new Error("league view did not render after nav"));
+            if (back.length < 100) return reject(new Error("home did not render after back-nav"));
+            resolve(`home ${home.length} / league ${league.length} / back ${back.length}`);
+          });
+        }, 400);
+      }, 400);
+    }, 400);
   });
 }
 
 const seed = await fetchSeed();
 const content = assemble(Babel.transform(adapt(src), { presets: [["react", { runtime: "classic" }]] }).code, bootstrap(seed));
-const rootLen = await verify(content);
+const navReport = await verify(content);
 fs.writeFileSync(OUT, content);
 console.log(`✓ Preview written: ${OUT}`);
-console.log(`  league=${LEAGUE} role=${ROLE} seed="${seed.name}" size=${(content.length / 1024).toFixed(0)}KB mount=${rootLen}chars`);
+console.log(`  league=${LEAGUE} role=${ROLE} seed="${seed.name}" size=${(content.length / 1024).toFixed(0)}KB`);
+console.log(`  nav check: ${navReport}`);
 process.exit(0);
