@@ -1383,9 +1383,47 @@ function applySwaps(prev, selections, win, period, source, players) {
   return { ...prev, roster, records };
 }
 
-function Swap({ st, setSt, players, replayRecords }) {
-  const liveRecords = replayRecords || st.records;
+// Pure inverse of applySwaps for a single window: pulls that window's banked
+// (locked) rows back into the active roster. applySwaps banks the pre-swap
+// record and zeroes the active one, so a team's true un-swapped record is the
+// banked window PLUS everything it has accumulated since — not the banked
+// snapshot alone. Never mutates; returns a new state.
+function undoSwapWindow(state, win, period, players) {
+  const roster  = JSON.parse(JSON.stringify(state.roster));
+  const records = { ...state.records };
+  for (const player of players) {
+    const pr = roster[player];
+    if (!pr) continue;
+    // Teams currently in trash with this marker came FROM treasures
+    const fromTreasures = pr.trash.active.filter(([,s]) => s === win).map(([t]) => t);
+    // Teams currently in treasures with this marker came FROM trash
+    const fromTrash = pr.treasures.active.filter(([,s]) => s === win).map(([t]) => t);
 
+    for (const team of fromTreasures) {
+      const lk = pr.treasures.locked.find(([t,,,pd]) => t === team && pd === period);
+      if (lk) {
+        const [w, l] = records[team] || [0, 0];
+        records[team] = [lk[1] + w, lk[2] + l];
+        pr.treasures.locked = pr.treasures.locked.filter(x => x !== lk);
+      }
+      pr.trash.active     = pr.trash.active.filter(([t,s]) => !(t === team && s === win));
+      pr.treasures.active.push([team, null]);
+    }
+    for (const team of fromTrash) {
+      const lk = pr.trash.locked.find(([t,,,pd]) => t === team && pd === period);
+      if (lk) {
+        const [w, l] = records[team] || [0, 0];
+        records[team] = [lk[1] + w, lk[2] + l];
+        pr.trash.locked = pr.trash.locked.filter(x => x !== lk);
+      }
+      pr.treasures.active = pr.treasures.active.filter(([t,s]) => !(t === team && s === win));
+      pr.trash.active.push([team, null]);
+    }
+  }
+  return { ...state, roster, records };
+}
+
+function Swap({ st, setSt, players, replayRecords }) {
   const doneWk6  = players.some(p => {
     const r = st.roster[p];
     return r && ([...r.treasures.active, ...r.trash.active].some(([,s]) => s === "wk6"));
@@ -1405,6 +1443,12 @@ function Swap({ st, setSt, players, replayRecords }) {
   const isDone   = done[win];
   const [editing, setEditing] = useState(false);
 
+  // Re-editing an applied window works from a *virtual* pre-swap state. `st` is
+  // never touched until commit, so abandoning the editor (or closing the tab)
+  // leaves the saved board — and every viewer's copy — exactly as it was.
+  const baseSt      = isDone && editing ? undoSwapWindow(st, win, winInfo.period, players) : st;
+  const liveRecords = replayRecords || baseSt.records;
+
   function toggle(player, field, team) {
     setSelections(s => ({ ...s, [player]: { ...s[player], [field]: s[player][field] === team ? "" : team } }));
   }
@@ -1419,46 +1463,22 @@ function Swap({ st, setSt, players, replayRecords }) {
   }
 
   function startEditing() {
-    // Capture previous selections before undoing so UI comes back pre-filled
-    const prev = Object.fromEntries(players.map(p => {
+    // Pre-fill the editor with the swap that was actually applied. Nothing is
+    // written to st — baseSt renders the pre-swap board for re-selection.
+    setSelections(Object.fromEntries(players.map(p => {
       const pr = st.roster[p];
       if (!pr) return [p, { treasureOut: "", trashOut: "" }];
       return [p, {
         treasureOut: pr.trash.active.find(([,s]) => s === win)?.[0] || "",
         trashOut:    pr.treasures.active.find(([,s]) => s === win)?.[0] || "",
       }];
-    }));
-
-    // Undo: reverse the swap in st, restoring records from locked entries
-    setSt(cur => {
-      const roster  = JSON.parse(JSON.stringify(cur.roster));
-      const records = { ...cur.records };
-      for (const player of players) {
-        const pr = roster[player];
-        if (!pr) continue;
-        // Teams currently in trash with this marker came FROM treasures
-        const fromTreasures = pr.trash.active.filter(([,s]) => s === win).map(([t]) => t);
-        // Teams currently in treasures with this marker came FROM trash
-        const fromTrash = pr.treasures.active.filter(([,s]) => s === win).map(([t]) => t);
-
-        for (const team of fromTreasures) {
-          const lk = pr.treasures.locked.find(([t,,,pd]) => t === team && pd === winInfo.period);
-          if (lk) { records[team] = [lk[1], lk[2]]; pr.treasures.locked = pr.treasures.locked.filter(x => x !== lk); }
-          pr.trash.active     = pr.trash.active.filter(([t,s]) => !(t === team && s === win));
-          pr.treasures.active.push([team, null]);
-        }
-        for (const team of fromTrash) {
-          const lk = pr.trash.locked.find(([t,,,pd]) => t === team && pd === winInfo.period);
-          if (lk) { records[team] = [lk[1], lk[2]]; pr.trash.locked = pr.trash.locked.filter(x => x !== lk); }
-          pr.treasures.active = pr.treasures.active.filter(([t,s]) => !(t === team && s === win));
-          pr.trash.active.push([team, null]);
-        }
-      }
-      return { ...cur, roster, records };
-    });
-
-    setSelections(prev);
+    })));
     setEditing(true);
+  }
+
+  function cancelEditing() {
+    setEditing(false);
+    setSelections(Object.fromEntries(players.map(p => [p, { treasureOut: "", trashOut: "" }])));
   }
 
   function commitSwap() {
@@ -1473,7 +1493,9 @@ function Swap({ st, setSt, players, replayRecords }) {
     if (incompletePlayers.length) { alert(`Each swap must move one Treasure AND one Trash so every player stays 4 & 4.\n\nFinish or clear: ${incompletePlayers.join(", ")}`); return; }
     if (!confirm(`Apply ${winInfo.label} swaps?\n\n${lines.join("\n")}\n\nBanked W/L will be locked. Cannot be undone.`)) return;
 
-    setSt(prev => applySwaps(prev, selections, win, winInfo.period, replayRecords || prev.records, players));
+    // Apply to baseSt, not st: when re-editing, baseSt already has this window's
+    // swap unwound, so this is a single atomic replace rather than undo-then-redo.
+    setSt(applySwaps(baseSt, selections, win, winInfo.period, liveRecords, players));
     setSelections(Object.fromEntries(players.map(p => [p, { treasureOut: "", trashOut: "" }])));
     setEditing(false);
   }
@@ -1485,7 +1507,7 @@ function Swap({ st, setSt, players, replayRecords }) {
   const canApply = hasSelection && incompletePlayers.length === 0;
 
   // Live projected state + standings for the preview board (only when valid)
-  const previewState = canApply ? applySwaps(st, selections, win, winInfo.period, liveRecords, players) : null;
+  const previewState = canApply ? applySwaps(baseSt, selections, win, winInfo.period, liveRecords, players) : null;
   function rankingFor(state) {
     const totals = {}; players.forEach(p => totals[p] = totalScore(p, state));
     const order = [...players].sort((a, b) => totals[b] - totals[a]);
@@ -1609,7 +1631,7 @@ function Swap({ st, setSt, players, replayRecords }) {
       </div>
       <div className="dash">
         {players.map(p => {
-          const pr  = st.roster[p];
+          const pr  = baseSt.roster[p];
           if (!pr) return null;
           const sel = selections[p];
           const both = !!(sel.treasureOut && sel.trashOut);
@@ -1666,6 +1688,7 @@ function Swap({ st, setSt, players, replayRecords }) {
 
       <div className="row" style={{ gap: 12, marginTop: 20 }}>
         <button className="btn" onClick={commitSwap} disabled={!canApply}>Apply swaps →</button>
+        {isDone && editing && <button className="btn ghost" onClick={cancelEditing}>Cancel</button>}
         {!hasSelection && <span className="sub">Tap teams above to select swaps</span>}
         {incompletePlayers.length > 0 && (
           <span className="sub" style={{ color: "var(--pink)" }}>
