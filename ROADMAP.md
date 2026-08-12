@@ -1,21 +1,25 @@
-# Roadmap — Path to Soft Launch
+# Roadmap
 
-Decided architecture for locking the app down so **Vince is the only admin** and
-everyone else views (including watching the draft live).
+The soft-launch plan (single admin, everyone else watches) is **built and
+deployed**. What follows is the model as shipped, plus what's left.
 
-## Decided model
+## The model
 
-- **Auth:** Firebase Auth with Google sign-in. Exactly one admin (Vince). Your
-  user ID (UID) is hardcoded in the security rules.
+- **Auth:** Firebase Auth with Google sign-in. Exactly one admin (Vince), whose
+  UID is hardcoded as `ADMIN_UID` in `index.html` *and* in the security rules.
 - **Everyone else:** read-only, **no login ever**. Viewers read straight from
   Firestore with no auth.
-- **Draft:** you make every pick live in the app on a group call; viewers watch
-  the draft board update in real time on their own (non-admin) devices.
-- **Consequence:** because friends only ever *read* — even during the draft —
-  we do **not** need anonymous auth or any looser write rules. One rule covers
-  everything: public read, writes only by your UID.
+- **Draft:** the admin makes every pick live; viewers watch the board update in
+  real time on their own devices.
+- **Consequence:** because friends only ever *read* — even during the draft — we
+  need no anonymous auth and no looser write rules. One rule covers everything:
+  public read, writes only by the admin UID.
 
-## Security rules (the whole enforcement)
+## Security rules — the whole enforcement
+
+These live in the Firebase console (project `trash-treasures-2b85a`), not in this
+repo. The UI gating is only UX; **these rules are what actually stops anyone
+else writing.**
 
 ```
 rules_version = '2';
@@ -30,46 +34,33 @@ service cloud.firestore {
 }
 ```
 
-If draft state lives in its own collection, add a matching block with the same
-read/write rule.
+If draft state lives in its own collection, it needs a matching block.
 
-## Work items
+## Shipped
 
-### 1. Firebase console (manual, ~10 min)
-- [ ] Enable **Google** as a sign-in provider.
-- [ ] Sign in once in the app, capture your UID (`auth.currentUser.uid`).
-- [ ] Paste your UID into the rules above and **publish** them.
+- [x] Firebase Google sign-in wired up; `ADMIN_UID` set to a real UID.
+- [x] Admin-only tabs (Edit / Swap / Draft) hidden from viewers; sign-in control
+      shown only in the admin context.
+- [x] Draft state moved from localStorage into Firestore, synced live so viewers
+      watch picks land in real time.
+- [x] Central league registry — all leagues listed from Firestore, with rename
+      and a landing page.
+- [x] Hourly ESPN score sync via GitHub Action, plus in-browser auto-sync.
+- [x] Paired swaps enforced (rosters stay 4 & 4), banked values regenerated from
+      real per-window game results.
+- [x] Swap re-edit no longer destroys data — `undoSwapWindow()` is a pure
+      inverse of `applySwaps()`, guarded by `tools/swap-roundtrip.test.mjs`.
 
-### 2. App — auth integration (`index.html`)
-- [ ] Add the `firebase-auth-compat.js` CDN script.
-- [ ] Add a **Sign in / Sign out** control, shown only in the admin context
-      (`?admin=1`). Viewers never see it.
-- [ ] Gate admin writes on being signed in as the admin UID. If someone opens
-      `?admin=1` but isn't signed in, show "Sign in to edit" instead of the
-      edit tabs. (The rule is the real enforcement; this is just UX.)
+## Open
 
-### 3. App — draft goes live to viewers
-> Today the Draft tab is localStorage-only and doesn't sync at all, so this is
-> the prerequisite for viewers seeing anything.
-- [ ] Move draft state from localStorage into Firestore (debounced save, same
-      pattern as the main board).
-- [ ] Admin makes picks → writes to Firestore (allowed only for your UID).
-- [ ] Viewers subscribe to draft state and render the board **read-only**
-      (reuse `DraftRosterPreview` + the on-the-clock banner) while a draft is in
-      progress.
+- [ ] **Verify the published Firestore rules** match the block above and carry
+      the real UID. This can only be checked in the Firebase console, and it is
+      the only thing actually preventing a stranger from writing to the leagues.
+- [ ] Decide what happens to any leftover `localStorage` draft from before the
+      Firestore migration (migrate or ignore).
 
-### 4. Cleanup / known bugs
-- [ ] Fix the undo-swap record bug (`index.html` ~L1169): restoring a swapped
-      team rewinds its record to the banked snapshot instead of keeping the live
-      total.
-- [ ] Decide what happens to any existing localStorage draft (migrate or ignore).
+## Out of scope for now
 
-## Rough effort
-- Auth lock (items 1–2): ~1–2 hours.
-- Draft → Firestore + live viewer board (item 3): ~2–4 hours.
-- **Total: roughly half a day.**
-
-## Explicitly out of scope (for now)
 - Friends running their *own* independent leagues (full multi-tenant + per-user
   ownership). Revisit only if there's demand.
 - Friends drafting from their own devices (would need anonymous auth + a
