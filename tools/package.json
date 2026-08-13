@@ -5,7 +5,7 @@
   "description": "Dev-only: regenerate a self-contained Artifact preview from index.html.",
   "scripts": {
     "preview": "node build-preview.mjs",
-    "test": "node swap-roundtrip.test.mjs"
+    "test": "node swap-roundtrip.test.mjs && node schedule.test.mjs"
   },
   "devDependencies": {
     "@babel/standalone": "^7.25.0",

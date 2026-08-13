@@ -145,10 +145,57 @@ window.firebase = {
 };
 
 var _T = ${JSON.stringify(TEAMS)};
+
+// Synthetic regular-season calendar, so the Schedule tab can work the same way
+// offline as it does live: 18 weeks, first kickoff early September.
+var _WK_MS = 7*24*60*60*1000;
+var _SEASON_START = Date.parse('2026-09-06T07:00:00Z');
+function _calendar(){
+  var entries = [];
+  for (var w=1; w<=18; w++){
+    entries.push({
+      value: String(w),
+      label: 'Week ' + w,
+      startDate: new Date(_SEASON_START + (w-1)*_WK_MS).toISOString(),
+      endDate:   new Date(_SEASON_START + w*_WK_MS - 60000).toISOString()
+    });
+  }
+  return [{ value:'2', label:'Regular Season', entries: entries }];
+}
+// Rotate the pairings per week so consecutive weeks aren't identical.
+function _weekEvents(week){
+  var rot = _T.slice(); var shift = (week-1) % 16;
+  var second = rot.splice(16, 16);
+  for (var s=0; s<shift; s++) second.push(second.shift());
+  var events = [];
+  var kickoff = _SEASON_START + (week-1)*_WK_MS + 3*24*60*60*1000;
+  for (var i=0; i<16; i++){
+    events.push({
+      id: 'wk'+week+'g'+i,
+      date: new Date(kickoff + (i%4)*3*60*60*1000).toISOString(),
+      competitions: [{
+        status: { type: { completed:false, state:'pre', shortDetail:'Scheduled' } },
+        competitors: [
+          { homeAway:'away', score:'0', team:{ displayName: rot[i] } },
+          { homeAway:'home', score:'0', team:{ displayName: second[i] } }
+        ]
+      }]
+    });
+  }
+  return events;
+}
+
 window.fetch = function(url){
   if (typeof url==='string' && url.indexOf('/standings')>-1){
     var entries = _T.map(function(n,i){ var w=3+((i*5)%12), l=17-w; return { team:{displayName:n}, stats:[{name:'wins',value:w},{name:'losses',value:l},{name:'winPercent',value:w/(w+l)}] }; });
     return Promise.resolve({ ok:true, status:200, json:function(){ return Promise.resolve({ children:[{ standings:{ entries: entries } }] }); } });
+  }
+  if (typeof url==='string' && url.indexOf('/scoreboard')>-1){
+    var m = /[?&]week=(\\d+)/.exec(url);
+    var wk = m ? Number(m[1]) : 1;
+    return Promise.resolve({ ok:true, status:200, json:function(){
+      return Promise.resolve({ leagues:[{ calendar: _calendar() }], events: _weekEvents(wk) });
+    } });
   }
   return Promise.resolve({ ok:false, status:503, json:function(){ return Promise.resolve({}); } });
 };
@@ -199,17 +246,37 @@ function verify(content) {
       w.PREVIEW.go(`?league=${LEAGUE}&admin=1`);
       setTimeout(() => {
         const league = root();
-        // Navigate back home
-        w.PREVIEW.go("/app");
+        // Open the Schedule tab — it renders nothing until its fetches resolve,
+        // so a plain mount check would miss a broken one.
+        const schedTab = [...w.document.querySelectorAll("button.tab")]
+          .find(b => /schedule/i.test(b.textContent || ""));
+        if (schedTab) schedTab.click();
         setTimeout(() => {
-          const back = root();
-          done(() => {
-            if (errs.length) return reject(new Error("runtime error: " + errs[0]));
-            if (!/Standings|Treasures/.test(league)) return reject(new Error("league view did not render after nav"));
-            if (back.length < 100) return reject(new Error("home did not render after back-nav"));
-            resolve(`home ${home.length} / league ${league.length} / back ${back.length}`);
-          });
-        }, 400);
+          const sched = root();
+          const tutTab = [...w.document.querySelectorAll("button.tab")]
+            .find(b => /how it works/i.test(b.textContent || ""));
+          if (tutTab) tutTab.click();
+          setTimeout(() => {
+            const tut = root();
+            // Navigate back home
+            w.PREVIEW.go("/app");
+            setTimeout(() => {
+              const back = root();
+              done(() => {
+                if (errs.length) return reject(new Error("runtime error: " + errs[0]));
+                if (!/Standings|Treasures/.test(league)) return reject(new Error("league view did not render after nav"));
+                if (!schedTab) return reject(new Error("Schedule tab button not found"));
+                if (/Couldn't load/.test(sched)) return reject(new Error("Schedule tab errored: " + sched.slice(0, 160)));
+                if (!/Week \d/.test(sched)) return reject(new Error("Schedule tab rendered no weeks: " + sched.slice(0, 160)));
+                if (!/@/.test(sched)) return reject(new Error("Schedule tab rendered no matchups"));
+                if (!tutTab) return reject(new Error("Tutorial tab button not found"));
+                if (!/worked example/i.test(tut)) return reject(new Error("Tutorial tab did not render: " + tut.slice(0, 160)));
+                if (back.length < 100) return reject(new Error("home did not render after back-nav"));
+                resolve(`home ${home.length} / league ${league.length} / schedule ${sched.length} / tutorial ${tut.length} / back ${back.length}`);
+              });
+            }, 400);
+          }, 400);
+        }, 600);
       }, 400);
     }, 400);
   });

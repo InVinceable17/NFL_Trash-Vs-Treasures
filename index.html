@@ -27,7 +27,54 @@
   #root { max-width: 1180px; margin: 0 auto; padding: 22px 14px 80px; }
   h1 { font-size: 24px; margin: 0; letter-spacing: -0.5px; }
   .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
-  .tabs { display: flex; gap: 4px; margin: 18px 0; background: var(--panel); padding: 5px; border-radius: 12px; max-width: 400px; }
+  .tabs { display: flex; gap: 4px; margin: 18px 0; background: var(--panel); padding: 5px; border-radius: 12px; max-width: 520px; }
+
+  /* Tutorial */
+  .tut { max-width: 780px; }
+  .tut-h { font-size: 20px; font-weight: 800; margin: 4px 0 10px; }
+  .tut-h3 { font-size: 15px; font-weight: 800; margin: 26px 0 8px; }
+  .tut-p { font-size: 13.5px; line-height: 1.65; color: var(--text); margin: 0 0 12px; }
+  .tut-p.sub { color: var(--muted); font-size: 12.5px; }
+  .tut-rule { border-left: 3px solid var(--accent); background: var(--panel); padding: 11px 14px;
+              border-radius: 0 8px 8px 0; font-size: 14px; margin: 14px 0 4px; }
+  .tut-example { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; }
+  .tut-example > * { min-width: 0; }
+  .tut-sum td { font-weight: 800; border-top: 1px solid var(--line); color: var(--text); }
+  .tut-math { background: var(--panel-2); border-radius: 8px; padding: 10px 14px; font-size: 14px; margin-bottom: 14px; }
+  .tut-steps { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 14px; }
+  .tut-step { display: flex; gap: 10px; align-items: baseline; font-size: 13.5px; line-height: 1.6;
+              background: var(--panel); border-radius: 8px; padding: 10px 12px; }
+  .tut-n { flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #fff;
+           font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+  .tut-finish { margin-bottom: 12px; }
+  .tut-win td { color: var(--accent); font-weight: 800; }
+  .tut-list { font-size: 13.5px; line-height: 1.7; padding-left: 20px; margin: 0 0 12px; }
+  @media (max-width: 700px) { .tut-example { grid-template-columns: 1fr; } }
+
+  /* Schedule */
+  .chip { padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: transparent;
+          color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .sched-week { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
+  .sched-week-head { background: var(--panel-2); padding: 9px 12px; font-size: 12px; font-weight: 800;
+                     letter-spacing: .04em; text-transform: uppercase; }
+  .sched-game { padding: 9px 12px; border-top: 1px solid var(--line); }
+  .sched-game:first-of-type { border-top: none; }
+  .sched-when { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .sched-final { color: var(--text); font-weight: 700; }
+  .sched-matchup { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .sched-team { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+  .sched-name { font-size: 13px; font-weight: 700; }
+  .sched-at { color: var(--muted); font-size: 11px; }
+  .own-tags { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+  .own-tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
+  .own-tag.treasure { background: rgba(124,92,255,.18); color: #b9a6ff; }
+  .own-tag.trash    { background: rgba(255,126,182,.16); color: var(--pink); }
+  .sched-stake { margin-top: 5px; font-size: 11.5px; color: var(--accent); }
+  .sched-stake.locked { color: var(--muted); }
+  .sched-byes { padding: 8px 12px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted);
+                display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .bye-team { display: inline-flex; align-items: center; gap: 4px; }
   .tab { flex: 1; padding: 9px 12px; text-align: center; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); border: none; background: transparent; }
   .tab.active { background: var(--panel-2); color: var(--text); }
   button.btn { background: var(--accent); color: white; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
@@ -315,7 +362,9 @@ const DIVISIONS = [
   { conf:"NFC", div:"West",  teams:["Arizona Cardinals","Los Angeles Rams","San Francisco 49ers","Seattle Seahawks"] },
 ];
 
-const ESPN_SEASON = 2025;          // default season when a league hasn't set one
+// Tabs that read but never write, so everyone in the league sees them.
+const VIEWER_TABS = ["dashboard", "schedule", "tutorial"];
+const ESPN_SEASON = 2026;          // current season — the default everywhere a league hasn't set one
 const SEASONS = [2024, 2025, 2026]; // selectable seasons for sync + draft
 const REPLAY_SEASONS = [2024, 2025];
 const REPLAY_WEEKS   = 18;
@@ -338,6 +387,104 @@ async function fetchWeekScores(season, week) {
     }
   }
   return deltas;
+}
+
+// ---- Schedule ----
+// fetchWeekScores above only keeps W/L. These keep the matchups themselves, so
+// the Schedule tab can show who plays whom and what it's worth to each player.
+const REG_SEASON_WEEKS = 18;
+const gamesCache = new Map(); // `${season}-${week}` -> games[]
+let calendarCache = null;     // { season, weeks } — week boundaries are fixed once published
+
+// ESPN ships the whole regular-season calendar on every scoreboard response, so
+// one request tells us every week's start/end. Beats probing 18 weeks to find
+// out which one is next.
+async function fetchSeasonCalendar(season) {
+  if (calendarCache && calendarCache.season === season) return calendarCache.weeks;
+  const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=1&dates=${season}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`ESPN ${res.status}`);
+  const data = await res.json();
+  const cal  = data.leagues?.[0]?.calendar || [];
+  const reg  = cal.find(c => c.value === "2") || cal.find(c => /regular/i.test(c.label || ""));
+  const weeks = (reg?.entries || [])
+    .map(e => ({ week: Number(e.value), start: new Date(e.startDate), end: new Date(e.endDate) }))
+    .filter(w => w.week >= 1 && w.week <= REG_SEASON_WEEKS && !isNaN(w.start));
+  if (!weeks.length) throw new Error(`No ${season} schedule published yet`);
+  calendarCache = { season, weeks };
+  return weeks;
+}
+
+// The week in progress, else the next one to start. Before the season that's
+// week 1; after it, the final week.
+function weekForDate(weeks, now = new Date()) {
+  if (!weeks.length) return 1;
+  const live = weeks.find(w => now >= w.start && now <= w.end);
+  if (live) return live.week;
+  const next = weeks.find(w => w.start > now);
+  return next ? next.week : weeks[weeks.length - 1].week;
+}
+
+async function fetchWeekGames(season, week) {
+  const key = `${season}-${week}`;
+  if (gamesCache.has(key)) return gamesCache.get(key);
+  const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${week}&dates=${season}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`ESPN ${res.status}`);
+  const data = await res.json();
+  const games = (data.events || []).map(ev => {
+    const comp = ev.competitions?.[0] || {};
+    const side = ha => (comp.competitors || []).find(c => c.homeAway === ha);
+    const away = side("away"), home = side("home");
+    return {
+      id:        ev.id,
+      date:      ev.date ? new Date(ev.date) : null,
+      away:      away?.team?.displayName || "",
+      home:      home?.team?.displayName || "",
+      awayScore: Number(away?.score ?? 0),
+      homeScore: Number(home?.score ?? 0),
+      completed: !!comp.status?.type?.completed,
+      detail:    comp.status?.type?.shortDetail || "",
+    };
+  }).filter(g => g.away && g.home)
+    .sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
+  gamesCache.set(key, games);
+  return games;
+}
+
+// Who holds each team right now, and in which category. Locked (banked) rows are
+// history, so only active picks tag a game.
+function ownershipMap(roster, players) {
+  const own = {};
+  for (const p of players) {
+    const pr = roster?.[p];
+    if (!pr) continue;
+    for (const [sec, kind] of [["treasures", "treasure"], ["trash", "trash"]]) {
+      for (const [team] of (pr[sec]?.active || [])) {
+        if (!own[team]) own[team] = [];
+        own[team].push({ player: p, kind });
+      }
+    }
+  }
+  return own;
+}
+
+// What a game is worth to a player holding BOTH teams in it:
+//   same category on both sides -> exactly 1 pt, whoever wins
+//   opposite categories         -> 2 pts or 0, and both payouts ride on one result
+function gameStakes(game, own) {
+  const out = [];
+  for (const A of (own[game.away] || [])) {
+    for (const H of (own[game.home] || [])) {
+      if (A.player !== H.player) continue;
+      out.push({
+        player: A.player,
+        locked: A.kind === H.kind,
+        wants:  A.kind === H.kind ? null : (A.kind === "treasure" ? game.away : game.home),
+      });
+    }
+  }
+  return out;
 }
 
 async function fetchTeamData(season = ESPN_SEASON) {
@@ -1031,7 +1178,9 @@ function App({ initState, leagueInfo, remoteUpdate }) {
   const syncLabel = { saved: "Saved", syncing: "Saving…", error: "Sync error" }[syncStatus];
   const syncClass = { saved: "saved", syncing: "syncing", error: "error" }[syncStatus];
   // Fall back to the read-only dashboard if editing isn't allowed (e.g. signed out mid-edit)
-  const activeTab = canEdit ? tab : "dashboard";
+  // Viewers can reach the read-only tabs; anything that writes stays admin-only.
+  // (Firestore rules are the real enforcement — this just keeps the UI honest.)
+  const activeTab = (canEdit || VIEWER_TABS.includes(tab)) ? tab : "dashboard";
 
   return (
     <div>
@@ -1098,6 +1247,8 @@ function App({ initState, leagueInfo, remoteUpdate }) {
 
       <div className="tabs">
         <button className={"tab" + (activeTab === "dashboard" ? " active" : "")} onClick={() => setTab("dashboard")}>Dashboard</button>
+        <button className={"tab" + (activeTab === "schedule" ? " active" : "")} onClick={() => setTab("schedule")}>Schedule</button>
+        <button className={"tab" + (activeTab === "tutorial" ? " active" : "")} onClick={() => setTab("tutorial")}>How it works</button>
         {canEdit && <button className={"tab" + (activeTab === "edit" ? " active" : "")} onClick={() => setTab("edit")}>Edit</button>}
         {canEdit && <button className={"tab" + (activeTab === "swap" ? " active" : "")} onClick={() => setTab("swap")}>Swap</button>}
         {canEdit && <button className={"tab" + (activeTab === "draft" ? " active" : "")} onClick={() => setTab("draft")}>Draft</button>}
@@ -1105,6 +1256,10 @@ function App({ initState, leagueInfo, remoteUpdate }) {
 
       {activeTab === "dashboard"
         ? <Dashboard st={activeSt} ranking={ranking} players={players} />
+        : activeTab === "schedule"
+        ? <Schedule st={activeSt} players={players} />
+        : activeTab === "tutorial"
+        ? <Tutorial players={players} />
         : activeTab === "edit"
         ? <Edit st={st} setSt={setSt} players={players} leagueId={LEAGUE_ID} leagueName={leagueName} />
         : activeTab === "swap"
@@ -1116,6 +1271,322 @@ function App({ initState, leagueInfo, remoteUpdate }) {
 }
 
 function ordinal(n) { return n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : n + "th"; }
+
+// ========== Tutorial ==========
+// A worked example beats a rules list. Numbers here are invented but sized to a
+// real 17-game season, so the totals land where actual totals land.
+const TUT_TREASURES = [["Denver Broncos", 14, 3], ["Buffalo Bills", 12, 5], ["Detroit Lions", 9, 8], ["Indianapolis Colts", 3, 14]];
+const TUT_TRASH     = [["New York Giants", 4, 13], ["Cleveland Browns", 5, 12], ["Las Vegas Raiders", 3, 14], ["Green Bay Packers", 11, 6]];
+const TUT_FINISH    = [["Riley", 41, 47], ["Sam", 38, 45], ["Jordan", 35, 44], ["Casey", 30, 41]];
+
+function TutTable({ rows, kind }) {
+  const total = rows.reduce((a, [, w, l]) => a + (kind === "treasure" ? w : l), 0);
+  return (
+    <React.Fragment>
+      <div className={"sec-head " + kind}>{kind === "treasure" ? "💎 Treasures — you score their WINS" : "🗑️ Trash — you score their LOSSES"}</div>
+      <table className="tt">
+        <thead><tr><th className="tm">Team</th><th>W</th><th>L</th><th>Pts</th></tr></thead>
+        <tbody>
+          {rows.map(([team, w, l]) => (
+            <tr key={team}>
+              <td className="tm">{team}</td><td>{w}</td><td>{l}</td>
+              <td className="pts">{kind === "treasure" ? w : l}</td>
+            </tr>
+          ))}
+          <tr className="tut-sum">
+            <td className="tm">Subtotal</td><td></td><td></td>
+            <td className="pts">{total}</td>
+          </tr>
+        </tbody>
+      </table>
+    </React.Fragment>
+  );
+}
+
+function Tutorial({ players }) {
+  const tre = TUT_TREASURES.reduce((a, [, w]) => a + w, 0);
+  const tra = TUT_TRASH.reduce((a, [, , l]) => a + l, 0);
+  const n = players?.length || 4;
+
+  return (
+    <div className="tut">
+      <h2 className="tut-h">How Trash &amp; Treasures works</h2>
+      <p className="tut-p">
+        Every player drafts <strong>8 NFL teams</strong>: four <strong>💎 Treasures</strong> you're betting
+        will be good, and four <strong>🗑️ Trash</strong> you're betting will be bad. You don't play anyone
+        head-to-head — you just accumulate points all season.
+      </p>
+      <div className="tut-rule">
+        Your score = <strong>every win your Treasures collect</strong> + <strong>every loss your Trash collects</strong>.
+      </div>
+
+      <h3 className="tut-h3">A worked example</h3>
+      <p className="tut-p">
+        Say this is your board at the end of a season. Treasures count their W column; Trash counts their L column.
+      </p>
+      <div className="tut-example">
+        <TutTable rows={TUT_TREASURES} kind="treasure" />
+        <TutTable rows={TUT_TRASH} kind="trash" />
+      </div>
+      <div className="tut-math">
+        {tre} (Treasure wins) + {tra} (Trash losses) = <strong>{tre + tra} points</strong>
+      </div>
+      <p className="tut-p">
+        Notice two things. The Colts were a bad Treasure pick — 3-14 gave you only 3 points. But the Packers
+        were a bad <em>Trash</em> pick for the same reason in reverse: they went 11-6, so they only handed you
+        6 losses. <strong>A pick fails when the team does the opposite of what you bet.</strong> And because
+        losses count just as hard as wins, a genuinely terrible team in your Trash is worth as much as a
+        contender in your Treasures.
+      </p>
+
+      <h3 className="tut-h3">Mid-season swaps</h3>
+      <p className="tut-p">
+        Twice a season — after <strong>Week 6</strong> and after <strong>Week 12</strong> — you can swap.
+        Each swap moves one Treasure <em>and</em> one Trash, so everyone always holds 4 and 4.
+      </p>
+      <p className="tut-p">
+        The part that surprises people: <strong>you keep what a team already earned you.</strong> Points
+        already banked don't disappear when you drop the team.
+      </p>
+      <div className="tut-steps">
+        <div className="tut-step"><span className="tut-n">1</span>
+          You drafted the <strong>Texans</strong> as a Treasure. Through Week 6 they go 2-3.</div>
+        <div className="tut-step"><span className="tut-n">2</span>
+          At the checkpoint you swap them out. Those <strong>2 wins lock in</strong> as a greyed row on your
+          board — worth 2 points for the rest of the season, no matter what the Texans do afterward.</div>
+        <div className="tut-step"><span className="tut-n">3</span>
+          Your replacement, the <strong>Steelers</strong>, starts from zero and scores from Week 7 on. If they
+          go 10-4 the rest of the way, that's 10 more.</div>
+        <div className="tut-step"><span className="tut-n">4</span>
+          That roster slot ends up worth <strong>2 + 10 = 12 points</strong>.</div>
+      </div>
+      <p className="tut-p">
+        On the Dashboard those banked rows are the greyed <strong>🔒 LOCKED</strong> lines under each table.
+        They still count toward your total — they're just finished.
+      </p>
+
+      <h3 className="tut-h3">What the end of the season looks like</h3>
+      <p className="tut-p">
+        Each team plays 17 games, and you hold 8 teams, so there's a lot of scoring surface. Realistic finals
+        land in the <strong>70s and 80s</strong>, and the spread between first and last is usually
+        <strong> 10-15 points</strong> — close enough that the Week 12 swap often decides it.
+      </p>
+      <table className="tt tut-finish">
+        <thead><tr><th className="tm">Pos</th><th className="tm">Player</th><th>W's from Winners</th><th>L's from Losers</th><th>Total</th></tr></thead>
+        <tbody>
+          {TUT_FINISH.map(([name, w, l], i) => (
+            <tr key={name} className={i === 0 ? "tut-win" : ""}>
+              <td className="tm">{ordinal(i + 1)}</td>
+              <td className="tm">{name}</td><td>{w}</td><td>{l}</td>
+              <td className="pts">{w + l}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="tut-p">
+        Riley didn't win by finding four great Treasures — the columns show the gap came mostly from the
+        <strong> Trash side</strong>. Picking teams that genuinely collapse is usually where seasons are won,
+        because a 3-14 team hands you 14 points and there are only ever a few of them.
+      </p>
+
+      <h3 className="tut-h3">Where to look</h3>
+      <ul className="tut-list">
+        <li><strong>Dashboard</strong> — every player's board and the live standings.</li>
+        <li><strong>Schedule</strong> — upcoming games, tagged with who holds each team and what a game is
+            worth to them. Games where one player holds both sides are flagged.</li>
+      </ul>
+      <p className="tut-p sub">
+        {n} players · 8 teams each · 2 swap windows · scores refresh automatically about once an hour.
+      </p>
+    </div>
+  );
+}
+
+// ========== Schedule ==========
+const KICKOFF_FMT = { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" };
+
+function OwnerTags({ team, own, filter }) {
+  const tags = (own[team] || []).filter(o => filter === "all" || o.player === filter);
+  if (!tags.length) return null;
+  return (
+    <span className="own-tags">
+      {tags.map(o => (
+        <span key={o.player + o.kind} className={"own-tag " + o.kind}>
+          {o.player} {o.kind === "treasure" ? "💎" : "🗑️"}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function GameRow({ game, own, filter }) {
+  const stakes = gameStakes(game, own).filter(s => filter === "all" || s.player === filter);
+  const teamCell = team => (
+    <div className="sched-team">
+      {TEAM_ABBREV[team] && <img className="team-logo-sm" src={teamLogo(team)} alt="" />}
+      <span className="sched-name">{team}</span>
+      <OwnerTags team={team} own={own} filter={filter} />
+    </div>
+  );
+  return (
+    <div className="sched-game">
+      <div className="sched-when">
+        {game.date ? game.date.toLocaleString([], KICKOFF_FMT) : "TBD"}
+        {game.completed && <span className="sched-final"> · {game.awayScore}-{game.homeScore} F</span>}
+      </div>
+      <div className="sched-matchup">
+        {teamCell(game.away)}
+        <span className="sched-at">@</span>
+        {teamCell(game.home)}
+      </div>
+      {stakes.map(s => (
+        <div key={s.player} className={"sched-stake" + (s.locked ? " locked" : "")}>
+          {s.locked
+            ? `🔒 ${s.player} banks 1 pt either way — holds both sides`
+            : `⚡ ${s.player}: 2 pts if ${s.wants} wins, 0 if not — holds both sides`}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WeekBlock({ week, games, own, filter, label }) {
+  const playing = new Set(games.flatMap(g => [g.away, g.home]));
+  const byes = Object.keys(TEAM_ABBREV)
+    .filter(t => !playing.has(t))
+    .filter(t => (own[t] || []).some(o => filter === "all" || o.player === filter));
+  const shown = games.filter(g =>
+    filter === "all" ||
+    [g.away, g.home].some(t => (own[t] || []).some(o => o.player === filter)));
+
+  return (
+    <div className="sched-week">
+      <div className="sched-week-head">
+        Week {week}{label ? <span className="sub" style={{ marginLeft: 8 }}>{label}</span> : null}
+      </div>
+      {shown.length === 0
+        ? <div className="sub" style={{ padding: "10px 12px" }}>No games for this filter.</div>
+        : shown.map(g => <GameRow key={g.id} game={g} own={own} filter={filter} />)}
+      {byes.length > 0 && (
+        <div className="sched-byes">
+          On bye: {byes.map(t => (
+            <span key={t} className="bye-team">
+              {t}<OwnerTags team={t} own={own} filter={filter} />
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Schedule({ st, players }) {
+  const season = ESPN_SEASON;
+  const [weeks, setWeeks]     = useState([]);
+  const [thisWeek, setThis]   = useState(null);
+  const [mode, setMode]       = useState("next");  // "next" | "full"
+  const [byWeek, setByWeek]   = useState({});      // week -> games[]
+  const [loading, setLoading] = useState(true);
+  const [err, setErr]         = useState(null);
+  const [filter, setFilter]   = useState("all");
+
+  const own = useMemo(() => ownershipMap(st.roster, players), [st.roster, players]);
+
+  // Calendar first, then the current week's games. Everything else is on demand.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true); setErr(null);
+        const cal = await fetchSeasonCalendar(season);
+        if (cancelled) return;
+        const wk = weekForDate(cal);
+        setWeeks(cal); setThis(wk);
+        const games = await fetchWeekGames(season, wk);
+        if (cancelled) return;
+        setByWeek(prev => ({ ...prev, [wk]: games }));
+      } catch (e) {
+        if (!cancelled) setErr(e.message || String(e));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [season]);
+
+  // Full view pulls every remaining week, in order, skipping anything cached.
+  useEffect(() => {
+    if (mode !== "full" || !thisWeek || !weeks.length) return;
+    let cancelled = false;
+    (async () => {
+      const remaining = weeks.filter(w => w.week >= thisWeek).map(w => w.week);
+      for (const wk of remaining) {
+        if (cancelled) return;
+        if (byWeek[wk]) continue;
+        try {
+          const games = await fetchWeekGames(season, wk);
+          if (cancelled) return;
+          setByWeek(prev => ({ ...prev, [wk]: games }));
+        } catch (e) { /* leave that week out rather than killing the view */ }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mode, thisWeek, weeks, season]);
+
+  if (loading) return <div className="sub" style={{ padding: 20 }}>Loading {season} schedule…</div>;
+  if (err) return (
+    <div className="espn-status err" style={{ padding: 20 }}>
+      Couldn't load the {season} schedule: {err}
+    </div>
+  );
+
+  const upcoming = weeks.filter(w => w.week >= thisWeek);
+  const shownWeeks = mode === "next" ? upcoming.slice(0, 1) : upcoming;
+  const notStarted = weeks.length && new Date() < weeks[0].start;
+
+  return (
+    <div>
+      <div className="row between" style={{ marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+        <div className="row" style={{ gap: 8 }}>
+          <button className={"btn" + (mode === "next" ? "" : " ghost")} onClick={() => setMode("next")}>
+            Next week
+          </button>
+          <button className={"btn" + (mode === "full" ? "" : " ghost")} onClick={() => setMode("full")}>
+            Full schedule
+          </button>
+        </div>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          <button className={"chip" + (filter === "all" ? " on" : "")} onClick={() => setFilter("all")}>Everyone</button>
+          {players.map(p => (
+            <button key={p} className={"chip" + (filter === p ? " on" : "")} onClick={() => setFilter(p)}>{p}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="sub" style={{ marginBottom: 14 }}>
+        {season} season · tags show who holds each team right now
+        {notStarted ? ` · kicks off ${weeks[0].start.toLocaleDateString([], { month: "long", day: "numeric" })}` : ""}
+      </div>
+
+      {shownWeeks.map(w => (
+        byWeek[w.week]
+          ? <WeekBlock key={w.week} week={w.week} games={byWeek[w.week]} own={own} filter={filter}
+                       label={w.week === thisWeek && notStarted ? "season opener" : ""} />
+          : <div key={w.week} className="sched-week">
+              <div className="sched-week-head">Week {w.week}</div>
+              <div className="sub" style={{ padding: "10px 12px" }}>Loading…</div>
+            </div>
+      ))}
+
+      {mode === "next" && upcoming.length > 1 && (
+        <div className="sub" style={{ marginTop: 12 }}>
+          {upcoming.length - 1} more week{upcoming.length - 1 === 1 ? "" : "s"} to come —{" "}
+          <a onClick={() => setMode("full")} style={{ color: "var(--accent)", cursor: "pointer" }}>see the full schedule</a>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Section({ section, label, records }) {
   return (
