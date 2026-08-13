@@ -27,7 +27,10 @@
   #root { max-width: 1180px; margin: 0 auto; padding: 22px 14px 80px; }
   h1 { font-size: 24px; margin: 0; letter-spacing: -0.5px; }
   .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
-  .tabs { display: flex; gap: 4px; margin: 18px 0; background: var(--panel); padding: 5px; border-radius: 12px; max-width: 520px; }
+  /* Admins see six tabs; on a phone they must wrap rather than crush to nothing. */
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 18px 0; background: var(--panel); padding: 5px; border-radius: 12px; max-width: 620px; }
+  .tab { white-space: nowrap; }
+  @media (max-width: 560px) { .tabs { max-width: 100%; } .tab { flex: 1 1 auto; min-width: 88px; } }
 
   /* Tutorial */
   .tut { max-width: 780px; }
@@ -59,9 +62,16 @@
   .sched-week-head { background: var(--panel-2); padding: 9px 12px; font-size: 12px; font-weight: 800;
                      letter-spacing: .04em; text-transform: uppercase; }
   .sched-game { padding: 9px 12px; border-top: 1px solid var(--line); }
-  .sched-game:first-of-type { border-top: none; }
+  /* :first-of-type would match the week header (also a div), so key off the header instead */
+  .sched-week-head + .sched-game { border-top: none; }
   .sched-when { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
   .sched-final { color: var(--text); font-weight: 700; }
+  .sched-live { color: var(--pink); font-weight: 700; }
+  .week-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .week-nav-label { font-size: 14px; font-weight: 800; display: inline-flex; align-items: center; gap: 7px; }
+  .week-now { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em;
+              background: var(--accent); color: #fff; border-radius: 999px; padding: 2px 7px; }
+  .week-back { font-size: 12px; color: var(--accent); cursor: pointer; }
   .sched-matchup { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .sched-team { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
   .sched-name { font-size: 13px; font-weight: 700; }
@@ -1281,8 +1291,10 @@ const TUT_FINISH    = [["Riley", 41, 47], ["Sam", 38, 45], ["Jordan", 35, 44], [
 
 function TutTable({ rows, kind }) {
   const total = rows.reduce((a, [, w, l]) => a + (kind === "treasure" ? w : l), 0);
+  // Wrapper div matters: a Fragment would put the heading and the table in as
+  // separate grid children, splitting them across columns.
   return (
-    <React.Fragment>
+    <div className="tut-col">
       <div className={"sec-head " + kind}>{kind === "treasure" ? "💎 Treasures — you score their WINS" : "🗑️ Trash — you score their LOSSES"}</div>
       <table className="tt">
         <thead><tr><th className="tm">Team</th><th>W</th><th>L</th><th>Pts</th></tr></thead>
@@ -1299,7 +1311,7 @@ function TutTable({ rows, kind }) {
           </tr>
         </tbody>
       </table>
-    </React.Fragment>
+    </div>
   );
 }
 
@@ -1396,7 +1408,7 @@ function Tutorial({ players }) {
             worth to them. Games where one player holds both sides are flagged.</li>
       </ul>
       <p className="tut-p sub">
-        {n} players · 8 teams each · 2 swap windows · scores refresh automatically about once an hour.
+        {n} players · 8 teams each · 2 swap windows · scores refresh automatically every 15-30 minutes.
       </p>
     </div>
   );
@@ -1421,6 +1433,7 @@ function OwnerTags({ team, own, filter }) {
 
 function GameRow({ game, own, filter }) {
   const stakes = gameStakes(game, own).filter(s => filter === "all" || s.player === filter);
+  const started = !!game.date && game.date <= new Date();
   const teamCell = team => (
     <div className="sched-team">
       {TEAM_ABBREV[team] && <img className="team-logo-sm" src={teamLogo(team)} alt="" />}
@@ -1432,7 +1445,9 @@ function GameRow({ game, own, filter }) {
     <div className="sched-game">
       <div className="sched-when">
         {game.date ? game.date.toLocaleString([], KICKOFF_FMT) : "TBD"}
-        {game.completed && <span className="sched-final"> · {game.awayScore}-{game.homeScore} F</span>}
+        {game.completed
+          ? <span className="sched-final"> · {game.awayScore}-{game.homeScore} FINAL</span>
+          : started && <span className="sched-live"> · {game.awayScore}-{game.homeScore}{game.detail ? ` · ${game.detail}` : " · in progress"}</span>}
       </div>
       <div className="sched-matchup">
         {teamCell(game.away)}
@@ -1484,8 +1499,11 @@ function Schedule({ st, players }) {
   const season = ESPN_SEASON;
   const [weeks, setWeeks]     = useState([]);
   const [thisWeek, setThis]   = useState(null);
+  const [viewWeek, setView]   = useState(null);    // single-week mode: steppable, so results stay reachable
   const [mode, setMode]       = useState("next");  // "next" | "full"
   const [byWeek, setByWeek]   = useState({});      // week -> games[]
+  const [failed, setFailed]   = useState({});      // week -> error message
+  const [retryTick, setRetry] = useState(0);       // bumped to re-run the fetch loop
   const [loading, setLoading] = useState(true);
   const [err, setErr]         = useState(null);
   const [filter, setFilter]   = useState("all");
@@ -1501,7 +1519,7 @@ function Schedule({ st, players }) {
         const cal = await fetchSeasonCalendar(season);
         if (cancelled) return;
         const wk = weekForDate(cal);
-        setWeeks(cal); setThis(wk);
+        setWeeks(cal); setThis(wk); setView(wk);
         const games = await fetchWeekGames(season, wk);
         if (cancelled) return;
         setByWeek(prev => ({ ...prev, [wk]: games }));
@@ -1513,6 +1531,21 @@ function Schedule({ st, players }) {
     })();
     return () => { cancelled = true; };
   }, [season]);
+
+  // Stepping to another week pulls it on demand.
+  useEffect(() => {
+    if (mode !== "next" || !viewWeek || byWeek[viewWeek] || failed[viewWeek]) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const games = await fetchWeekGames(season, viewWeek);
+        if (!cancelled) setByWeek(prev => ({ ...prev, [viewWeek]: games }));
+      } catch (e) {
+        if (!cancelled) setFailed(prev => ({ ...prev, [viewWeek]: e.message || "failed" }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mode, viewWeek, season, retryTick]);
 
   // Full view pulls every remaining week, in order, skipping anything cached.
   useEffect(() => {
@@ -1527,11 +1560,15 @@ function Schedule({ st, players }) {
           const games = await fetchWeekGames(season, wk);
           if (cancelled) return;
           setByWeek(prev => ({ ...prev, [wk]: games }));
-        } catch (e) { /* leave that week out rather than killing the view */ }
+        } catch (e) {
+          // Record the failure — one bad week shouldn't kill the whole view, but
+          // it must not sit on a spinner forever either.
+          if (!cancelled) setFailed(prev => ({ ...prev, [wk]: e.message || "failed" }));
+        }
       }
     })();
     return () => { cancelled = true; };
-  }, [mode, thisWeek, weeks, season]);
+  }, [mode, thisWeek, weeks, season, retryTick]);
 
   if (loading) return <div className="sub" style={{ padding: 20 }}>Loading {season} schedule…</div>;
   if (err) return (
@@ -1541,8 +1578,12 @@ function Schedule({ st, players }) {
   );
 
   const upcoming = weeks.filter(w => w.week >= thisWeek);
-  const shownWeeks = mode === "next" ? upcoming.slice(0, 1) : upcoming;
+  const shownWeeks = mode === "next"
+    ? weeks.filter(w => w.week === viewWeek)
+    : upcoming;
   const notStarted = weeks.length && new Date() < weeks[0].start;
+  const firstWeek = weeks.length ? weeks[0].week : 1;
+  const lastWeek  = weeks.length ? weeks[weeks.length - 1].week : REG_SEASON_WEEKS;
 
   return (
     <div>
@@ -1568,13 +1609,37 @@ function Schedule({ st, players }) {
         {notStarted ? ` · kicks off ${weeks[0].start.toLocaleDateString([], { month: "long", day: "numeric" })}` : ""}
       </div>
 
+      {mode === "next" && (
+        <div className="week-nav">
+          <button className="btn ghost" disabled={viewWeek <= firstWeek}
+                  onClick={() => setView(v => Math.max(firstWeek, v - 1))}>‹ Prev</button>
+          <span className="week-nav-label">
+            Week {viewWeek}
+            {viewWeek === thisWeek && <span className="week-now">now</span>}
+          </span>
+          <button className="btn ghost" disabled={viewWeek >= lastWeek}
+                  onClick={() => setView(v => Math.min(lastWeek, v + 1))}>Next ›</button>
+          {viewWeek !== thisWeek && (
+            <a className="week-back" onClick={() => setView(thisWeek)}>back to current</a>
+          )}
+        </div>
+      )}
+
       {shownWeeks.map(w => (
         byWeek[w.week]
           ? <WeekBlock key={w.week} week={w.week} games={byWeek[w.week]} own={own} filter={filter}
                        label={w.week === thisWeek && notStarted ? "season opener" : ""} />
           : <div key={w.week} className="sched-week">
               <div className="sched-week-head">Week {w.week}</div>
-              <div className="sub" style={{ padding: "10px 12px" }}>Loading…</div>
+              {failed[w.week]
+                ? <div className="sub" style={{ padding: "10px 12px" }}>
+                    Couldn't load this week ({failed[w.week]}).{" "}
+                    <a style={{ color: "var(--accent)", cursor: "pointer" }}
+                       onClick={() => { setFailed(prev => { const n = { ...prev }; delete n[w.week]; return n; }); setRetry(t => t + 1); }}>
+                      Retry
+                    </a>
+                  </div>
+                : <div className="sub" style={{ padding: "10px 12px" }}>Loading…</div>}
             </div>
       ))}
 
