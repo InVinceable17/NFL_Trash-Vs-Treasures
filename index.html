@@ -2531,9 +2531,10 @@ function TeamStats({ td, sos, odds, proj, perfSeason, outlookSeason }) {
           <div className="stat-block-head">{outlookSeason} outlook</div>
           <div className="stat-rows">
             {proj && (
-              <div className="stat-row" title={`ESPN Football Power Index projection for ${outlookSeason}`}>
-                <span className="stat-label">Projected record</span>
-                <span className="stat-val">{proj.w.toFixed(1)}-{proj.l.toFixed(1)}</span>
+              <div className="stat-row"
+                   title={`ESPN Football Power Index projects ${proj.w.toFixed(1)}-${proj.l.toFixed(1)} for ${outlookSeason}`}>
+                <span className="stat-label">Projected # of Wins</span>
+                <span className="stat-val">{proj.w.toFixed(1)}</span>
               </div>
             )}
             {sos && (
