@@ -172,11 +172,12 @@
   .stat-val.neg { color: var(--pink); }
   /* Outlook stats read as phrases, so they get label-left / value-right rows
      rather than the stacked grid the performance numbers use. */
-  .stat-rows { display: flex; flex-direction: column; gap: 4px; }
+  .stat-rows { display: flex; flex-direction: column; gap: 5px; }
   .stat-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .stat-row .stat-label { white-space: nowrap; }
-  .stat-row .stat-val { text-align: right; white-space: normal; }
-  .stat-sub { font-size: 10px; font-weight: 700; color: var(--muted); }
+  .stat-row .stat-val { text-align: right; white-space: nowrap; }
+  /* Rank belongs on its own line under the number, not wrapped beside it */
+  .stat-sub { display: block; font-size: 10px; font-weight: 700; color: var(--muted); margin-top: 1px; }
   .teamcard-btns { display: flex; gap: 6px; }
   .teamcard-btns .pickbtn { flex: 1; font-size: 12px; padding: 6px 4px; }
   .pickbtn { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 4px 9px; font-size: 13px; font-weight: 700; cursor: pointer; }
@@ -500,12 +501,14 @@ async function fetchDraftStats(season) {
 // feed never holds up the board. Odds additionally wait on teamData, which is
 // where the ESPN team ids come from.
 function useOutlook(season, teamData) {
-  const [outlook, setOutlook] = useState({ sos: null, odds: null });
+  const [outlook, setOutlook] = useState({ sos: null, odds: null, proj: null });
   useEffect(() => {
     let cancelled = false;
     fetchStrengthOfSchedule(season)
       .then(sos => { if (!cancelled) setOutlook(o => ({ ...o, sos })); })
       .catch(() => {});
+    fetchProjections(season)
+      .then(proj => { if (!cancelled) setOutlook(o => ({ ...o, proj })); });
     return () => { cancelled = true; };
   }, [season]);
   useEffect(() => {
@@ -548,6 +551,33 @@ async function fetchStrengthOfSchedule(season) {
   ranked.forEach(([team, value], i) => { sos[team] = { value, rank: i + 1, of: ranked.length }; });
   outlookCache = { season, sos };
   return sos;
+}
+
+// ESPN's FPI projections: expected wins/losses for the season. This host does
+// send Access-Control-Allow-Origin, unlike /nfl/teams, so it works in-browser.
+// Best-effort like the odds — failure resolves to {} and the row drops out.
+let projCache = null; // { season, proj }
+async function fetchProjections(season) {
+  if (projCache && projCache.season === season) return projCache.proj;
+  const proj = {};
+  try {
+    const res = await fetch(`https://site.web.api.espn.com/apis/fitt/v3/sports/football/nfl/powerindex?season=${season}`);
+    if (!res.ok) throw new Error(`ESPN ${res.status}`);
+    const data = await res.json();
+    const cat = (data.categories || []).find(c => c.name === "projections");
+    const iw = (cat?.names || []).indexOf("projectedw");
+    const il = (cat?.names || []).indexOf("projectedl");
+    if (iw < 0) throw new Error("no projectedw in payload");
+    for (const t of (data.teams || [])) {
+      const name = t.team?.displayName;
+      const p = (t.categories || []).find(c => c.name === "projections");
+      const w = Number(p?.values?.[iw]);
+      if (!name || !isFinite(w)) continue;
+      proj[name] = { w, l: Number(p?.values?.[il]) };
+    }
+  } catch (e) { /* card degrades to the other stats */ }
+  if (Object.keys(proj).length) projCache = { season, proj };
+  return proj;
 }
 
 // Market-implied title odds, converted from American odds to a probability.
@@ -2480,10 +2510,9 @@ function DraftLive({ draft, players }) {
 // it finished) and what it FACES (this season's schedule, and the market's read).
 // Backward- and forward-looking numbers sit side by side without being confused
 // for each other.
-function TeamStats({ td, sos, odds, perfSeason, outlookSeason }) {
+function TeamStats({ td, sos, odds, proj, perfSeason, outlookSeason }) {
   if (!td && !sos) return null;
-  const pct  = v => v.toFixed(3).replace(/^0/, "");
-  const diff = td && td.diff != null ? (td.diff > 0 ? `+${td.diff}` : String(td.diff)) : null;
+  const pct = v => v.toFixed(3).replace(/^0/, "");
   return (
     <div className="stat-blocks">
       {td && (
@@ -2494,24 +2523,25 @@ function TeamStats({ td, sos, odds, perfSeason, outlookSeason }) {
             <div className="stat-item"><span className="stat-label">L</span><span className="stat-val">{td.l}</span></div>
             <div className="stat-item"><span className="stat-label">PCT</span><span className="stat-val">{pct(td.pct)}</span></div>
             <div className="stat-item"><span className="stat-label">Rank</span><span className="stat-val">#{td.rank}</span></div>
-            {diff !== null && (
-              <div className="stat-item" title="Points scored minus points allowed">
-                <span className="stat-label">Diff</span>
-                <span className={"stat-val " + (td.diff > 0 ? "pos" : td.diff < 0 ? "neg" : "")}>{diff}</span>
-              </div>
-            )}
           </div>
         </div>
       )}
-      {(sos || odds != null) && (
+      {(sos || odds != null || proj) && (
         <div className="stat-block">
           <div className="stat-block-head">{outlookSeason} outlook</div>
           <div className="stat-rows">
+            {proj && (
+              <div className="stat-row" title={`ESPN Football Power Index projection for ${outlookSeason}`}>
+                <span className="stat-label">Projected record</span>
+                <span className="stat-val">{proj.w.toFixed(1)}-{proj.l.toFixed(1)}</span>
+              </div>
+            )}
             {sos && (
               <div className="stat-row" title={`Average ${perfSeason} win% of this team's ${outlookSeason} opponents — ${ordinal(sos.rank)} hardest of ${sos.of}`}>
                 <span className="stat-label">Strength of Schedule</span>
                 <span className="stat-val">
-                  {pct(sos.value)} <span className="stat-sub">({ordinal(sos.rank)} hardest)</span>
+                  {pct(sos.value)}
+                  <span className="stat-sub">({ordinal(sos.rank)} hardest)</span>
                 </span>
               </div>
             )}
@@ -2530,7 +2560,7 @@ function TeamStats({ td, sos, odds, perfSeason, outlookSeason }) {
 
 // The undrafted pool, grouped conference → division. Shared by the admin draft
 // (pick buttons wired) and the viewer watch view (no buttons, same information).
-function AvailableTeams({ taken, teamData, onPick, counts, current, statsLabel, sos, odds, perfSeason, outlookSeason }) {
+function AvailableTeams({ taken, teamData, onPick, counts, current, statsLabel, sos, odds, proj, perfSeason, outlookSeason }) {
   const confs = ["AFC", "NFC"].filter(conf =>
     DIVISIONS.some(d => d.conf === conf && d.teams.some(t => !taken.has(t))));
   if (!confs.length) return <div className="sub" style={{ padding: "10px 0" }}>Every team has been drafted.</div>;
@@ -2555,7 +2585,7 @@ function AvailableTeams({ taken, teamData, onPick, counts, current, statsLabel, 
                           <img className="team-logo" src={teamLogo(t)} alt="" />
                           <div className="team-info">
                             <span className="tnm" title={t}>{t}</span>
-                            <TeamStats td={td} sos={sos?.[t]} odds={odds?.[t]}
+                            <TeamStats td={td} sos={sos?.[t]} odds={odds?.[t]} proj={proj?.[t]}
                                        perfSeason={perfSeason} outlookSeason={outlookSeason} />
                           </div>
                         </div>
@@ -2583,7 +2613,7 @@ function AvailableTeams({ taken, teamData, onPick, counts, current, statsLabel, 
 // difference is that viewers pass no controls and no onPick, so they get the
 // same board, same roster grid, same available teams, minus the interaction.
 function DraftBoard({ draft, players, teamData, statsLabel, controls, onPick, counts,
-                      sos, odds, perfSeason, outlookSeason }) {
+                      sos, odds, proj, perfSeason, outlookSeason }) {
   const order      = (draft.order && draft.order.length) ? draft.order : players;
   const totalPicks = ROUNDS * players.length;
   const pickIndex  = draft.picks.length;
@@ -2607,7 +2637,7 @@ function DraftBoard({ draft, players, teamData, statsLabel, controls, onPick, co
       <DraftRosterPreview picks={draft.picks} order={order} current={current} />
       <div className="sec-head" style={{ marginTop: 14 }}>Still available — {32 - taken.size} teams</div>
       <AvailableTeams taken={taken} teamData={teamData} statsLabel={statsLabel}
-                      sos={sos} odds={odds} perfSeason={perfSeason} outlookSeason={outlookSeason}
+                      sos={sos} odds={odds} proj={proj} perfSeason={perfSeason} outlookSeason={outlookSeason}
                       onPick={onPick} counts={counts} current={current} />
     </div>
   );
@@ -2620,7 +2650,7 @@ function DraftWatch({ st, players, season }) {
   const [teamData, setTeamData]     = useState(null);
   const [statsLabel, setStatsLabel] = useState("");
   const [perfSeason, setPerfSeason] = useState(season - 1);
-  const { sos, odds } = useOutlook(season, teamData);
+  const { sos, odds, proj } = useOutlook(season, teamData);
   useEffect(() => {
     let cancelled = false;
     fetchDraftStats(season)
@@ -2640,7 +2670,7 @@ function DraftWatch({ st, players, season }) {
   return (
     <div>
       <DraftBoard draft={draft} players={players} teamData={teamData} statsLabel={statsLabel}
-                  sos={sos} odds={odds} perfSeason={perfSeason} outlookSeason={season}
+                  sos={sos} odds={odds} proj={proj} perfSeason={perfSeason} outlookSeason={season}
                   controls={<span className="replay-badge">🔴 LIVE</span>} />
       <div className="viewer-banner" style={{ marginTop: 16 }}>
         👀 Following along — the board updates as picks are made. The commissioner
@@ -2663,7 +2693,7 @@ function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft, seaso
 
   const [statsLabel, setStatsLabel] = useState("");
   const [perfSeason, setPerfSeason] = useState(season - 1);
-  const { sos, odds } = useOutlook(season, teamData);
+  const { sos, odds, proj } = useOutlook(season, teamData);
   function loadESPN() {
     setTdLoading(true); setTdError(null);
     fetchDraftStats(season)
@@ -2767,7 +2797,7 @@ function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft, seaso
 
   return (
     <DraftBoard draft={draft} players={players} teamData={teamData} statsLabel={statsLabel}
-                sos={sos} odds={odds} perfSeason={perfSeason} outlookSeason={season}
+                sos={sos} odds={odds} proj={proj} perfSeason={perfSeason} outlookSeason={season}
                 onPick={pick} counts={counts}
                 controls={
                   <div className="row" style={{ gap: 8 }}>

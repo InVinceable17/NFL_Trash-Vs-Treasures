@@ -218,6 +218,16 @@ window.fetch = function(url){
   // NOTE: /nfl/teams is deliberately NOT stubbed. It sends no CORS header, so
   // the real browser blocks it; stubbing it here would let a call that cannot
   // work in production pass offline. Team ids come from standings instead.
+  if (typeof url==='string' && url.indexOf('/powerindex')>-1){
+    return Promise.resolve({ ok:true, status:200, json:function(){ return Promise.resolve({
+      categories:[{ name:'projections', names:['projectedw','projectedl'] }],
+      teams: _T.map(function(n,i){
+        var pw = 12 - (i*7)%8;   // spread 5..12 so cards differ
+        return { team:{ id:String(i+1), displayName:n },
+                 categories:[{ name:'projections', values:[pw, 17-pw] }] };
+      })
+    }); } });
+  }
   if (typeof url==='string' && url.indexOf('/futures')>-1){
     var books = _T.map(function(n,i){ return { team:{ $ref:'.../teams/'+(i+1)+'?lang=en' }, value:'+'+(500+i*250) }; });
     return Promise.resolve({ ok:true, status:200, json:function(){ return Promise.resolve({
