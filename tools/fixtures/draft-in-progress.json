@@ -1,0 +1,94 @@
+{
+  "name": "Draft Fixture 2026",
+  "season": 2026,
+  "players": [
+    "Natalie",
+    "Kevin",
+    "Vince",
+    "Haley"
+  ],
+  "records": {},
+  "roster": {
+    "Natalie": {
+      "treasures": {
+        "active": [],
+        "locked": []
+      },
+      "trash": {
+        "active": [],
+        "locked": []
+      }
+    },
+    "Kevin": {
+      "treasures": {
+        "active": [],
+        "locked": []
+      },
+      "trash": {
+        "active": [],
+        "locked": []
+      }
+    },
+    "Vince": {
+      "treasures": {
+        "active": [],
+        "locked": []
+      },
+      "trash": {
+        "active": [],
+        "locked": []
+      }
+    },
+    "Haley": {
+      "treasures": {
+        "active": [],
+        "locked": []
+      },
+      "trash": {
+        "active": [],
+        "locked": []
+      }
+    }
+  },
+  "draft": {
+    "phase": "draft",
+    "order": [
+      "Natalie",
+      "Kevin",
+      "Vince",
+      "Haley"
+    ],
+    "picks": [
+      {
+        "player": "Natalie",
+        "team": "Denver Broncos",
+        "type": "treasure"
+      },
+      {
+        "player": "Kevin",
+        "team": "Buffalo Bills",
+        "type": "treasure"
+      },
+      {
+        "player": "Vince",
+        "team": "New York Giants",
+        "type": "trash"
+      },
+      {
+        "player": "Haley",
+        "team": "Los Angeles Rams",
+        "type": "treasure"
+      },
+      {
+        "player": "Haley",
+        "team": "Cleveland Browns",
+        "type": "trash"
+      },
+      {
+        "player": "Vince",
+        "team": "Detroit Lions",
+        "type": "treasure"
+      }
+    ]
+  }
+}

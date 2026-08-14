@@ -34,11 +34,25 @@ preview.
 
 ```
 node build-preview.mjs [--league <id>] [--role admin|viewer] [--out <path>]
+                       [--seed <file.json>]
 ```
 
 - `--league` Firestore league id to seed from (default: the current league).
-- `--role`   `admin` shows all tabs; `viewer` shows the read-only dashboard.
+- `--role`   `admin` shows all tabs; `viewer` shows the read-only view.
 - `--out`    output path (default `tools/preview.html`).
+- `--seed`   load a league snapshot from disk instead of fetching the live one.
+
+`--seed` exists because some states are hard to reach live — a draft mid-flight,
+an empty league, a finished season. `fixtures/draft-in-progress.json` holds a
+draft six picks deep, which is how the read-only viewer draft view gets tested
+without anyone running a real draft:
+
+```
+node build-preview.mjs --role viewer --seed fixtures/draft-in-progress.json
+```
+
+The stubbed ESPN feed is season-aware: 2026 returns 0-0 like the real one does
+before kickoff, so draft boards exercise their previous-season fallback.
 
 The build self-verifies by mounting the output in jsdom and fails loudly if the
 app doesn't render. If the live snapshot can't be fetched, it falls back to a

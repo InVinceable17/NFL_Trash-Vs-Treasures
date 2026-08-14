@@ -195,6 +195,8 @@
   .text-input { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 14px; width: 100%; }
   .text-input:focus { outline: none; border-color: var(--accent); }
   .viewer-banner { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; color: var(--muted); }
+  .draft-invite { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+                  flex-wrap: wrap; border-color: var(--accent); color: var(--text); }
 
   /* Sync status dot */
   .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); display: inline-block; margin-left: 6px; vertical-align: middle; }
@@ -373,7 +375,9 @@ const DIVISIONS = [
 ];
 
 // Tabs that read but never write, so everyone in the league sees them.
-const VIEWER_TABS = ["dashboard", "schedule", "tutorial"];
+// "draft" is read-only for viewers (DraftWatch) and only reachable while a
+// draft is actually running.
+const VIEWER_TABS = ["dashboard", "schedule", "tutorial", "draft"];
 const ESPN_SEASON = 2026;          // current season — the default everywhere a league hasn't set one
 const SEASONS = [2024, 2025, 2026]; // selectable seasons for sync + draft
 const REPLAY_SEASONS = [2024, 2025];
@@ -460,6 +464,22 @@ async function fetchWeekGames(season, week) {
     .sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
   gamesCache.set(key, games);
   return games;
+}
+
+// Stats for the draft board. A season that hasn't kicked off returns all 32
+// teams at 0-0, which tells a drafter nothing — so fall back to last season's
+// finish and say so, since that's the form guide people actually draft on.
+async function fetchDraftStats(season) {
+  const played = d => Object.values(d || {}).reduce((a, t) => a + (t.w || 0) + (t.l || 0), 0);
+  const cur = await fetchTeamData(season);
+  if (played(cur) > 0) return { data: cur, label: `${season} records` };
+  try {
+    const prev = await fetchTeamData(season - 1);
+    if (played(prev) > 0) {
+      return { data: prev, label: `${season} hasn't kicked off — showing ${season - 1} final records` };
+    }
+  } catch (e) { /* fall through to the empty current season */ }
+  return { data: cur, label: `${season} records` };
 }
 
 // Who holds each team right now, and in which category. Locked (banked) rows are
@@ -742,6 +762,7 @@ function LeagueHome() {
   const [newPlayers, setNewPlayers] = useState(["","","",""]);
   const [copied, setCopied] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const importFileRef = useRef(null);
 
   // Auth — only the admin can create/delete; everyone else just browses.
@@ -848,6 +869,19 @@ function LeagueHome() {
     }
   }
 
+  if (showGuide) return (
+    <div>
+      <div className="row between" style={{ marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
+        <h1>🗑️ Trash &amp; 💎 Treasures</h1>
+        <button className="btn ghost" onClick={() => setShowGuide(false)}>← Back to leagues</button>
+      </div>
+      <Tutorial />
+      <div style={{ marginTop: 24 }}>
+        <button className="btn" onClick={() => setShowGuide(false)}>← Back to leagues</button>
+      </div>
+    </div>
+  );
+
   return (
     <div>
       <div className="row between" style={{ marginBottom: 28, flexWrap: "wrap", gap: 10 }}>
@@ -855,10 +889,25 @@ function LeagueHome() {
           <h1>🗑️ Trash &amp; 💎 Treasures</h1>
           <div className="sub">{isAdmin ? "Manage leagues" : "Browse leagues"}{loadingList && leagues.length > 0 ? " · refreshing…" : ""}</div>
         </div>
-        {isAdmin
-          ? <button className="btn ghost" onClick={signOut}>Sign out</button>
-          : <button className="btn ghost" onClick={signIn}>Admin sign in</button>}
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn ghost" onClick={() => setShowGuide(true)}>📖 How it works</button>
+          {isAdmin
+            ? <button className="btn ghost" onClick={signOut}>Sign out</button>
+            : <button className="btn ghost" onClick={signIn}>Admin sign in</button>}
+        </div>
       </div>
+
+      {/* Rules are readable before you belong to any league — a new player can be
+          sent this link and understand the game without one being created first. */}
+      {!leagues.length && !loadingList && (
+        <div className="panel" style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>New here?</div>
+          <div className="sub" style={{ marginBottom: 12 }}>
+            Read the rules and a worked example — no league needed.
+          </div>
+          <button className="btn" onClick={() => setShowGuide(true)}>📖 How it works →</button>
+        </div>
+      )}
 
       <input ref={importFileRef} type="file" accept=".json" onChange={handleImport} style={{ display: "none" }} />
 
@@ -1190,7 +1239,9 @@ function App({ initState, leagueInfo, remoteUpdate }) {
   // Fall back to the read-only dashboard if editing isn't allowed (e.g. signed out mid-edit)
   // Viewers can reach the read-only tabs; anything that writes stays admin-only.
   // (Firestore rules are the real enforcement — this just keeps the UI honest.)
-  const activeTab = (canEdit || VIEWER_TABS.includes(tab)) ? tab : "dashboard";
+  const draftLive  = !!st.draft && (st.draft.phase === "draft" || st.draft.phase === "review");
+  const viewerOk   = VIEWER_TABS.includes(tab) && (tab !== "draft" || draftLive);
+  const activeTab  = (canEdit || viewerOk) ? tab : "dashboard";
 
   return (
     <div>
@@ -1228,6 +1279,13 @@ function App({ initState, leagueInfo, remoteUpdate }) {
 
       {!IS_ADMIN && <div className="viewer-banner">👀 View-only — scores update live when the admin makes changes.</div>}
 
+      {!canEdit && draftLive && activeTab !== "draft" && (
+        <div className="viewer-banner draft-invite">
+          <span>🔴 <strong>A draft is happening right now.</strong> Watch it live and see which teams are still on the board.</span>
+          <button className="btn" onClick={() => setTab("draft")}>Join the draft →</button>
+        </div>
+      )}
+
       {IS_ADMIN && !canEdit && (
         <div className="viewer-banner" style={{ borderColor: "var(--accent)" }}>
           {!authUser
@@ -1261,7 +1319,11 @@ function App({ initState, leagueInfo, remoteUpdate }) {
         <button className={"tab" + (activeTab === "tutorial" ? " active" : "")} onClick={() => setTab("tutorial")}>How it works</button>
         {canEdit && <button className={"tab" + (activeTab === "edit" ? " active" : "")} onClick={() => setTab("edit")}>Edit</button>}
         {canEdit && <button className={"tab" + (activeTab === "swap" ? " active" : "")} onClick={() => setTab("swap")}>Swap</button>}
-        {canEdit && <button className={"tab" + (activeTab === "draft" ? " active" : "")} onClick={() => setTab("draft")}>Draft</button>}
+        {(canEdit || draftLive) && (
+          <button className={"tab" + (activeTab === "draft" ? " active" : "")} onClick={() => setTab("draft")}>
+            Draft{!canEdit && draftLive ? " 🔴" : ""}
+          </button>
+        )}
       </div>
 
       {activeTab === "dashboard"
@@ -1274,8 +1336,10 @@ function App({ initState, leagueInfo, remoteUpdate }) {
         ? <Edit st={st} setSt={setSt} players={players} leagueId={LEAGUE_ID} leagueName={leagueName} />
         : activeTab === "swap"
         ? <Swap st={st} setSt={setSt} players={players} replayRecords={replayMode ? replayRecords : null} />
-        : <Draft commitSeason={commitSeason} players={players} leagueId={LEAGUE_ID}
-                 initialDraft={st.draft} syncDraft={syncDraft} season={st.season || ESPN_SEASON} />}
+        : canEdit
+        ? <Draft commitSeason={commitSeason} players={players} leagueId={LEAGUE_ID}
+                 initialDraft={st.draft} syncDraft={syncDraft} season={st.season || ESPN_SEASON} />
+        : <DraftWatch st={activeSt} players={players} season={st.season || ESPN_SEASON} />}
     </div>
   );
 }
@@ -2306,6 +2370,97 @@ function DraftLive({ draft, players }) {
   );
 }
 
+// The undrafted pool, grouped conference → division. Shared by the admin draft
+// (pick buttons wired) and the viewer watch view (no buttons, same information).
+function AvailableTeams({ taken, teamData, onPick, counts, current, statsLabel }) {
+  const confs = ["AFC", "NFC"].filter(conf =>
+    DIVISIONS.some(d => d.conf === conf && d.teams.some(t => !taken.has(t))));
+  if (!confs.length) return <div className="sub" style={{ padding: "10px 0" }}>Every team has been drafted.</div>;
+  return (
+    <div>
+      {statsLabel && <div className="sub" style={{ margin: "12px 0 6px" }}>{statsLabel}</div>}
+      {confs.map(conf => (
+        <div className="conf-group" key={conf}>
+          <div className="conf-header">{conf}</div>
+          <div className="conf-div-grid">
+            {DIVISIONS.filter(d => d.conf === conf).map(({ div, teams }) => {
+              const avail = teams.filter(t => !taken.has(t))
+                .sort((a, b) => (teamData?.[a]?.rank ?? 99) - (teamData?.[b]?.rank ?? 99));
+              return (
+                <div className="div-col" key={div}>
+                  <div className="div-header">{div}</div>
+                  {avail.map(t => {
+                    const td = teamData?.[t];
+                    return (
+                      <div className="teamcard" key={t} style={{ ["--tc"]: COLORS[t] || "#666" }}>
+                        <div className="teamcard-top">
+                          <img className="team-logo" src={teamLogo(t)} alt="" />
+                          <div className="team-info">
+                            <span className="tnm" title={t}>{t}</span>
+                            {td && <div className="team-stats">
+                              <div className="stat-item"><span className="stat-label">Wins</span><span className="stat-val">{td.w}</span></div>
+                              <div className="stat-item"><span className="stat-label">Losses</span><span className="stat-val">{td.l}</span></div>
+                              <div className="stat-item"><span className="stat-label">PCT</span><span className="stat-val">{td.pct.toFixed(3).replace(/^0/,"")}</span></div>
+                              <div className="stat-item"><span className="stat-label">Rank</span><span className="stat-val">#{td.rank}</span></div>
+                            </div>}
+                          </div>
+                        </div>
+                        {onPick && (
+                          <div className="teamcard-btns">
+                            <button className="pickbtn t"  disabled={counts?.[current]?.treasure >= PER_CAT} onClick={() => onPick(t, "treasure")}>💎 Treasure</button>
+                            <button className="pickbtn tr" disabled={counts?.[current]?.trash    >= PER_CAT} onClick={() => onPick(t, "trash")}>🗑️ Trash</button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {!avail.length && <div style={{ color: "var(--line)", fontSize: 11, textAlign: "center", padding: "8px 0" }}>all picked</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Read-only draft for everyone who isn't running it: the live board, plus what's
+// still on the table so people can plan their next pick while they wait.
+function DraftWatch({ st, players, season }) {
+  const draft = st.draft;
+  const [teamData, setTeamData]   = useState(null);
+  const [statsLabel, setStatsLabel] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    fetchDraftStats(season)
+      .then(r => { if (!cancelled) { setTeamData(r.data); setStatsLabel(r.label); } })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [season]);
+
+  const taken = useMemo(() => new Set((draft?.picks || []).map(p => p.team)), [draft]);
+  if (!draft || draft.phase === "order") {
+    return (
+      <div className="sub" style={{ padding: 20 }}>
+        No draft is running right now. This page comes alive the moment the
+        commissioner starts one — leave it open and picks will appear here live.
+      </div>
+    );
+  }
+  return (
+    <div>
+      <DraftLive draft={draft} players={players} />
+      <div className="viewer-banner" style={{ marginTop: 14 }}>
+        👀 Watching live — picks appear here as they happen. You can't pick from this
+        screen; tell the commissioner who you want.
+      </div>
+      <div className="sec-head" style={{ marginTop: 4 }}>Still available — {32 - taken.size} teams</div>
+      <AvailableTeams taken={taken} teamData={teamData} statsLabel={statsLabel} />
+    </div>
+  );
+}
+
 function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft, season = ESPN_SEASON }) {
   const [draft, setDraft] = useState(() => initialDraft || loadDraft(leagueId) || { phase: "order", order: [...players], picks: [] });
   const [teamData, setTeamData] = useState(null);
@@ -2317,10 +2472,11 @@ function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft, seaso
   // Push every draft change up into shared state → Firestore → viewers watch live
   useEffect(() => { syncDraft(draft); }, [draft]);
 
+  const [statsLabel, setStatsLabel] = useState("");
   function loadESPN() {
     setTdLoading(true); setTdError(null);
-    fetchTeamData(season)
-      .then(d => { setTeamData(d); setTdLoading(false); })
+    fetchDraftStats(season)
+      .then(r => { setTeamData(r.data); setStatsLabel(r.label); setTdLoading(false); })
       .catch(e => { setTdError(e.message || "Failed"); setTdLoading(false); });
   }
   useEffect(loadESPN, [season]);
@@ -2374,7 +2530,7 @@ function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft, seaso
       <div className="sub" style={{marginBottom:8}}>Drag to reorder, then snake-draft 4 💎 Treasures and 4 🗑️ Trash per player — 8 rounds total.</div>
       {tdLoading && <div className="espn-status">⏳ Loading {season} standings from ESPN…</div>}
       {tdError && <div className="espn-status err">⚠️ ESPN load failed: {tdError} <button className="btn ghost" style={{marginLeft:8,padding:"3px 10px"}} onClick={loadESPN}>Retry</button></div>}
-      {teamData && <div className="espn-status">✓ {season} standings loaded</div>}
+      {teamData && <div className="espn-status">✓ {statsLabel || `${season} standings`} loaded</div>}
       <button className="btn ghost" onClick={randomize} style={{marginBottom:12}}>🎲 Randomize order</button>
       <div className="draft-order-list">
         {draft.order.map((p,i) => (
@@ -2430,49 +2586,8 @@ function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft, seaso
         </div>
       </div>
       <DraftRosterPreview picks={draft.picks} order={draft.order} current={current} />
-      {["AFC","NFC"].map(conf => {
-        const confDivs = DIVISIONS.filter(d=>d.conf===conf);
-        if (!confDivs.some(d=>d.teams.some(t=>!taken.has(t)))) return null;
-        return (
-          <div className="conf-group" key={conf}>
-            <div className="conf-header">{conf}</div>
-            <div className="conf-div-grid">
-              {confDivs.map(({div,teams}) => {
-                const avail = teams.filter(t=>!taken.has(t)).sort((a,b)=>(teamData?.[a]?.rank??99)-(teamData?.[b]?.rank??99));
-                return (
-                  <div className="div-col" key={div}>
-                    <div className="div-header">{div}</div>
-                    {avail.map(t => {
-                      const td=teamData?.[t];
-                      return (
-                        <div className="teamcard" key={t} style={{["--tc"]:COLORS[t]||"#666"}}>
-                          <div className="teamcard-top">
-                            <img className="team-logo" src={teamLogo(t)} alt="" />
-                            <div className="team-info">
-                              <span className="tnm" title={t}>{t}</span>
-                              {td && <div className="team-stats">
-                                <div className="stat-item"><span className="stat-label">Wins</span><span className="stat-val">{td.w}</span></div>
-                                <div className="stat-item"><span className="stat-label">Losses</span><span className="stat-val">{td.l}</span></div>
-                                <div className="stat-item"><span className="stat-label">PCT</span><span className="stat-val">{td.pct.toFixed(3).replace(/^0/,"")}</span></div>
-                                <div className="stat-item"><span className="stat-label">Rank</span><span className="stat-val">#{td.rank}</span></div>
-                              </div>}
-                            </div>
-                          </div>
-                          <div className="teamcard-btns">
-                            <button className="pickbtn t" disabled={counts[current]?.treasure>=PER_CAT} onClick={()=>pick(t,"treasure")}>💎 Treasure</button>
-                            <button className="pickbtn tr" disabled={counts[current]?.trash>=PER_CAT} onClick={()=>pick(t,"trash")}>🗑️ Trash</button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {!avail.length && <div style={{color:"var(--line)",fontSize:11,textAlign:"center",padding:"8px 0"}}>all picked</div>}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
+      <AvailableTeams taken={taken} teamData={teamData} statsLabel={statsLabel}
+                      onPick={pick} counts={counts} current={current} />
     </div>
   );
 }

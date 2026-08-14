@@ -9,6 +9,11 @@
 // Usage:
 //   npm install                 # once, in this tools/ dir
 //   node build-preview.mjs [--league <id>] [--role admin|viewer] [--out <path>]
+//                          [--seed <file.json>]
+//
+// --seed loads a league snapshot from disk instead of fetching the live one.
+// Use it to preview states that don't exist live right now — a draft mid-flight,
+// an empty league, a finished season.
 //
 // Then publish the output file as an Artifact. To keep the same Artifact URL,
 // always publish from the same path (or pass its url when publishing).
@@ -61,6 +66,12 @@ function decodeFields(fields) {
 }
 
 async function fetchSeed() {
+  const SEED_FILE = arg("seed", null);
+  if (SEED_FILE) {
+    const seed = JSON.parse(fs.readFileSync(SEED_FILE, "utf8"));
+    console.log(`  seed loaded from ${path.basename(SEED_FILE)}`);
+    return seed;
+  }
   if (!projectId || !apiKey) return FALLBACK_SEED;
   try {
     const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/leagues/${LEAGUE}?key=${apiKey}`;
@@ -187,7 +198,15 @@ function _weekEvents(week){
 
 window.fetch = function(url){
   if (typeof url==='string' && url.indexOf('/standings')>-1){
-    var entries = _T.map(function(n,i){ var w=3+((i*5)%12), l=17-w; return { team:{displayName:n}, stats:[{name:'wins',value:w},{name:'losses',value:l},{name:'winPercent',value:w/(w+l)}] }; });
+    // Season-aware: 2026 hasn't kicked off, so it returns 0-0 like the real feed.
+    // That lets the preview exercise the previous-season fallback on draft boards.
+    var sm = /[?&]season=(\\d+)/.exec(url);
+    var yr = sm ? Number(sm[1]) : 2026;
+    var unplayed = yr >= 2026;
+    var entries = _T.map(function(n,i){
+      var w = unplayed ? 0 : 3+((i*5)%12), l = unplayed ? 0 : 17-w;
+      return { team:{displayName:n}, stats:[{name:'wins',value:w},{name:'losses',value:l},{name:'winPercent',value:(w+l)?w/(w+l):0}] };
+    });
     return Promise.resolve({ ok:true, status:200, json:function(){ return Promise.resolve({ children:[{ standings:{ entries: entries } }] }); } });
   }
   if (typeof url==='string' && url.indexOf('/scoreboard')>-1){
