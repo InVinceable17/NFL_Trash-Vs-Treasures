@@ -170,6 +170,13 @@
   .stat-val { font-size: 12px; font-weight: 800; white-space: nowrap; }
   .stat-val.pos { color: #4ade80; }
   .stat-val.neg { color: var(--pink); }
+  /* Outlook stats read as phrases, so they get label-left / value-right rows
+     rather than the stacked grid the performance numbers use. */
+  .stat-rows { display: flex; flex-direction: column; gap: 4px; }
+  .stat-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .stat-row .stat-label { white-space: nowrap; }
+  .stat-row .stat-val { text-align: right; white-space: normal; }
+  .stat-sub { font-size: 10px; font-weight: 700; color: var(--muted); }
   .teamcard-btns { display: flex; gap: 6px; }
   .teamcard-btns .pickbtn { flex: 1; font-size: 12px; padding: 6px 4px; }
   .pickbtn { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 4px 9px; font-size: 13px; font-weight: 700; cursor: pointer; }
@@ -490,18 +497,24 @@ async function fetchDraftStats(season) {
 }
 
 // SOS and market odds, loaded independently of the records so a slow or missing
-// odds feed never holds up the board.
-function useOutlook(season) {
+// feed never holds up the board. Odds additionally wait on teamData, which is
+// where the ESPN team ids come from.
+function useOutlook(season, teamData) {
   const [outlook, setOutlook] = useState({ sos: null, odds: null });
   useEffect(() => {
     let cancelled = false;
     fetchStrengthOfSchedule(season)
       .then(sos => { if (!cancelled) setOutlook(o => ({ ...o, sos })); })
       .catch(() => {});
-    fetchMarketOdds(season)
-      .then(odds => { if (!cancelled) setOutlook(o => ({ ...o, odds })); });
     return () => { cancelled = true; };
   }, [season]);
+  useEffect(() => {
+    if (!teamData) return;
+    let cancelled = false;
+    fetchMarketOdds(season, teamIdMap(teamData))
+      .then(odds => { if (!cancelled) setOutlook(o => ({ ...o, odds })); });
+    return () => { cancelled = true; };
+  }, [season, teamData]);
   return outlook;
 }
 
@@ -538,19 +551,14 @@ async function fetchStrengthOfSchedule(season) {
 }
 
 // Market-implied title odds, converted from American odds to a probability.
-// Strictly best-effort: a different host, and futures get pulled and repriced,
-// so any failure resolves to {} and the card simply omits the row.
-async function fetchMarketOdds(season) {
+// Best-effort: futures markets get pulled and repriced, so any failure resolves
+// to {} and the card simply omits the row. Takes the id->name map from standings
+// rather than fetching /nfl/teams, which is CORS-blocked in the browser.
+async function fetchMarketOdds(season, byId) {
   if (oddsCache && oddsCache.season === season) return oddsCache.odds;
   const odds = {};
   try {
-    const tRes = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams");
-    if (!tRes.ok) throw new Error(`ESPN ${tRes.status}`);
-    const tJson = await tRes.json();
-    const byId = {};
-    for (const s of (tJson.sports?.[0]?.leagues?.[0]?.teams || [])) {
-      if (s.team?.id) byId[s.team.id] = s.team.displayName;
-    }
+    if (!byId || !Object.keys(byId).length) throw new Error("no team id map");
     const fRes = await fetch(`https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/${season}/futures`);
     if (!fRes.ok) throw new Error(`ESPN ${fRes.status}`);
     const fJson = await fRes.json();
@@ -563,7 +571,9 @@ async function fetchMarketOdds(season) {
       odds[name] = n > 0 ? 100 / (n + 100) : Math.abs(n) / (Math.abs(n) + 100);
     }
   } catch (e) { /* card degrades to the other stats */ }
-  oddsCache = { season, odds };
+  // Only cache a real result — an empty one would pin the failure for the session
+  // and block the retry that arrives once teamData lands.
+  if (Object.keys(odds).length) oddsCache = { season, odds };
   return odds;
 }
 
@@ -613,14 +623,24 @@ async function fetchTeamData(season = ESPN_SEASON) {
       const name = entry.team?.displayName;
       if (!name) continue;
       const s = Object.fromEntries((entry.stats || []).map(x => [x.name, x.value]));
-      all.push({ name, w: s.wins ?? 0, l: s.losses ?? 0, pct: s.winPercent ?? 0,
+      all.push({ name, id: entry.team?.id, w: s.wins ?? 0, l: s.losses ?? 0, pct: s.winPercent ?? 0,
                  diff: s.pointDifferential ?? s.differential ?? 0 });
     }
   }
   all.sort((a, b) => b.pct - a.pct || b.w - a.w);
   const result = {};
-  all.forEach((t, i) => { result[t.name] = { w: t.w, l: t.l, pct: t.pct, diff: t.diff, rank: i + 1 }; });
+  all.forEach((t, i) => { result[t.name] = { w: t.w, l: t.l, pct: t.pct, diff: t.diff, rank: i + 1, id: t.id }; });
   return result;
+}
+
+// ESPN team id -> display name, sourced from standings. The obvious endpoint for
+// this (/nfl/teams) sends no Access-Control-Allow-Origin, so the browser blocks
+// it even though it works fine from a server — standings carries the same ids
+// and is CORS-enabled, so it costs nothing extra.
+function teamIdMap(teamData) {
+  const byId = {};
+  for (const [name, t] of Object.entries(teamData || {})) if (t.id) byId[String(t.id)] = name;
+  return byId;
 }
 
 // ---- Seeded data (2024 season — for legacy import) ----
@@ -2486,22 +2506,18 @@ function TeamStats({ td, sos, odds, perfSeason, outlookSeason }) {
       {(sos || odds != null) && (
         <div className="stat-block">
           <div className="stat-block-head">{outlookSeason} outlook</div>
-          <div className="team-stats">
+          <div className="stat-rows">
             {sos && (
-              <div className="stat-item" title={`Average ${perfSeason} win% of this team's ${outlookSeason} opponents`}>
-                <span className="stat-label">SOS</span>
-                <span className="stat-val">{pct(sos.value)}</span>
-              </div>
-            )}
-            {sos && (
-              <div className="stat-item" title={`${sos.rank} hardest schedule of ${sos.of}`}>
-                <span className="stat-label">Sched</span>
-                <span className="stat-val">#{sos.rank}</span>
+              <div className="stat-row" title={`Average ${perfSeason} win% of this team's ${outlookSeason} opponents — ${ordinal(sos.rank)} hardest of ${sos.of}`}>
+                <span className="stat-label">Strength of Schedule</span>
+                <span className="stat-val">
+                  {pct(sos.value)} <span className="stat-sub">({ordinal(sos.rank)} hardest)</span>
+                </span>
               </div>
             )}
             {odds != null && (
-              <div className="stat-item" title="Market-implied chance of winning the Super Bowl">
-                <span className="stat-label">Title</span>
+              <div className="stat-row" title="Market-implied chance of winning the Super Bowl">
+                <span className="stat-label">Title odds</span>
                 <span className="stat-val">{(odds * 100).toFixed(1)}%</span>
               </div>
             )}
@@ -2604,7 +2620,7 @@ function DraftWatch({ st, players, season }) {
   const [teamData, setTeamData]     = useState(null);
   const [statsLabel, setStatsLabel] = useState("");
   const [perfSeason, setPerfSeason] = useState(season - 1);
-  const { sos, odds } = useOutlook(season);
+  const { sos, odds } = useOutlook(season, teamData);
   useEffect(() => {
     let cancelled = false;
     fetchDraftStats(season)
@@ -2647,7 +2663,7 @@ function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft, seaso
 
   const [statsLabel, setStatsLabel] = useState("");
   const [perfSeason, setPerfSeason] = useState(season - 1);
-  const { sos, odds } = useOutlook(season);
+  const { sos, odds } = useOutlook(season, teamData);
   function loadESPN() {
     setTdLoading(true); setTdError(null);
     fetchDraftStats(season)

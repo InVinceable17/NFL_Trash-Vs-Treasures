@@ -206,7 +206,8 @@ window.fetch = function(url){
     var entries = _T.map(function(n,i){
       var w = unplayed ? 0 : 3+((i*5)%12), l = unplayed ? 0 : 17-w;
       var diff = unplayed ? 0 : (w-l)*13 - 20;   // rough but signed, so +/- styling is exercised
-      return { team:{displayName:n}, stats:[
+      // id must match the futures stub's team refs — the app maps ids via standings
+      return { team:{ id:String(i+1), displayName:n }, stats:[
         {name:'wins',value:w},{name:'losses',value:l},
         {name:'winPercent',value:(w+l)?w/(w+l):0},
         {name:'pointDifferential',value:diff}
@@ -214,14 +215,9 @@ window.fetch = function(url){
     });
     return Promise.resolve({ ok:true, status:200, json:function(){ return Promise.resolve({ children:[{ standings:{ entries: entries } }] }); } });
   }
-  // Team directory + Super Bowl futures, so the draft card's odds row renders
-  // offline. Team ids here are just indexes — only the mapping has to be
-  // self-consistent between the two responses.
-  if (typeof url==='string' && /\\/nfl\\/teams(\\?|$)/.test(url)){
-    return Promise.resolve({ ok:true, status:200, json:function(){ return Promise.resolve({
-      sports:[{ leagues:[{ teams: _T.map(function(n,i){ return { team:{ id:String(i+1), displayName:n } }; }) }] }]
-    }); } });
-  }
+  // NOTE: /nfl/teams is deliberately NOT stubbed. It sends no CORS header, so
+  // the real browser blocks it; stubbing it here would let a call that cannot
+  // work in production pass offline. Team ids come from standings instead.
   if (typeof url==='string' && url.indexOf('/futures')>-1){
     var books = _T.map(function(n,i){ return { team:{ $ref:'.../teams/'+(i+1)+'?lang=en' }, value:'+'+(500+i*250) }; });
     return Promise.resolve({ ok:true, status:200, json:function(){ return Promise.resolve({
