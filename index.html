@@ -160,10 +160,16 @@
   .team-logo-sm { width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin-right: 3px; flex-shrink: 0; }
   .team-info { flex: 1; min-width: 0; }
   .teamcard .tnm { font-size: 12.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
-  .team-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 4px; margin-top: 6px; }
-  .stat-item { display: flex; flex-direction: column; gap: 1px; }
+  .stat-blocks { display: flex; flex-direction: column; gap: 7px; margin-top: 7px; }
+  .stat-block-head { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px;
+                     color: var(--muted); opacity: .75; margin-bottom: 3px; }
+  .stat-block + .stat-block { border-top: 1px solid var(--line); padding-top: 6px; }
+  .team-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px 4px; }
+  .stat-item { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   .stat-label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
-  .stat-val { font-size: 12px; font-weight: 800; }
+  .stat-val { font-size: 12px; font-weight: 800; white-space: nowrap; }
+  .stat-val.pos { color: #4ade80; }
+  .stat-val.neg { color: var(--pink); }
   .teamcard-btns { display: flex; gap: 6px; }
   .teamcard-btns .pickbtn { flex: 1; font-size: 12px; padding: 6px 4px; }
   .pickbtn { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 4px 9px; font-size: 13px; font-weight: 700; cursor: pointer; }
@@ -472,14 +478,93 @@ async function fetchWeekGames(season, week) {
 async function fetchDraftStats(season) {
   const played = d => Object.values(d || {}).reduce((a, t) => a + (t.w || 0) + (t.l || 0), 0);
   const cur = await fetchTeamData(season);
-  if (played(cur) > 0) return { data: cur, label: `${season} records` };
+  if (played(cur) > 0) return { data: cur, label: `${season} records`, season };
   try {
     const prev = await fetchTeamData(season - 1);
     if (played(prev) > 0) {
-      return { data: prev, label: `${season} hasn't kicked off — showing ${season - 1} final records` };
+      return { data: prev, season: season - 1,
+               label: `${season} hasn't kicked off — showing ${season - 1} final records` };
     }
   } catch (e) { /* fall through to the empty current season */ }
-  return { data: cur, label: `${season} records` };
+  return { data: cur, label: `${season} records`, season };
+}
+
+// SOS and market odds, loaded independently of the records so a slow or missing
+// odds feed never holds up the board.
+function useOutlook(season) {
+  const [outlook, setOutlook] = useState({ sos: null, odds: null });
+  useEffect(() => {
+    let cancelled = false;
+    fetchStrengthOfSchedule(season)
+      .then(sos => { if (!cancelled) setOutlook(o => ({ ...o, sos })); })
+      .catch(() => {});
+    fetchMarketOdds(season)
+      .then(odds => { if (!cancelled) setOutlook(o => ({ ...o, odds })); });
+    return () => { cancelled = true; };
+  }, [season]);
+  return outlook;
+}
+
+// ---- 2026 outlook (draft board) ----
+let outlookCache = null; // { season, sos } — schedule is fixed once published
+let oddsCache    = null; // { season, odds }
+
+// Strength of schedule: the average previous-season win% of a team's opponents.
+// Built from feeds already in flight — the same weekly scoreboards the Schedule
+// tab fetches (shared gamesCache) plus last season's standings. No new source.
+async function fetchStrengthOfSchedule(season) {
+  if (outlookCache && outlookCache.season === season) return outlookCache.sos;
+  const prev  = await fetchTeamData(season - 1);
+  const weeks = await Promise.all(
+    Array.from({ length: REG_SEASON_WEEKS }, (_, i) => fetchWeekGames(season, i + 1).catch(() => []))
+  );
+  const opponents = {};
+  for (const games of weeks) {
+    for (const g of games) {
+      (opponents[g.away] = opponents[g.away] || []).push(g.home);
+      (opponents[g.home] = opponents[g.home] || []).push(g.away);
+    }
+  }
+  const raw = {};
+  for (const [team, list] of Object.entries(opponents)) {
+    if (!list.length) continue;
+    raw[team] = list.reduce((a, o) => a + (prev[o]?.pct ?? 0.5), 0) / list.length;
+  }
+  const ranked = Object.entries(raw).sort((a, b) => b[1] - a[1]);
+  const sos = {};
+  ranked.forEach(([team, value], i) => { sos[team] = { value, rank: i + 1, of: ranked.length }; });
+  outlookCache = { season, sos };
+  return sos;
+}
+
+// Market-implied title odds, converted from American odds to a probability.
+// Strictly best-effort: a different host, and futures get pulled and repriced,
+// so any failure resolves to {} and the card simply omits the row.
+async function fetchMarketOdds(season) {
+  if (oddsCache && oddsCache.season === season) return oddsCache.odds;
+  const odds = {};
+  try {
+    const tRes = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams");
+    if (!tRes.ok) throw new Error(`ESPN ${tRes.status}`);
+    const tJson = await tRes.json();
+    const byId = {};
+    for (const s of (tJson.sports?.[0]?.leagues?.[0]?.teams || [])) {
+      if (s.team?.id) byId[s.team.id] = s.team.displayName;
+    }
+    const fRes = await fetch(`https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/${season}/futures`);
+    if (!fRes.ok) throw new Error(`ESPN ${fRes.status}`);
+    const fJson = await fRes.json();
+    const market = (fJson.items || []).find(i => /super bowl winner/i.test(i.name || ""));
+    for (const entry of (market?.futures?.[0]?.books || [])) {
+      const id = entry.team?.$ref?.split("/").pop()?.split("?")[0];
+      const name = byId[id];
+      const n = Number(String(entry.value ?? "").replace("+", ""));
+      if (!name || !isFinite(n) || n === 0) continue;
+      odds[name] = n > 0 ? 100 / (n + 100) : Math.abs(n) / (Math.abs(n) + 100);
+    }
+  } catch (e) { /* card degrades to the other stats */ }
+  oddsCache = { season, odds };
+  return odds;
 }
 
 // Who holds each team right now, and in which category. Locked (banked) rows are
@@ -528,12 +613,13 @@ async function fetchTeamData(season = ESPN_SEASON) {
       const name = entry.team?.displayName;
       if (!name) continue;
       const s = Object.fromEntries((entry.stats || []).map(x => [x.name, x.value]));
-      all.push({ name, w: s.wins ?? 0, l: s.losses ?? 0, pct: s.winPercent ?? 0 });
+      all.push({ name, w: s.wins ?? 0, l: s.losses ?? 0, pct: s.winPercent ?? 0,
+                 diff: s.pointDifferential ?? s.differential ?? 0 });
     }
   }
   all.sort((a, b) => b.pct - a.pct || b.w - a.w);
   const result = {};
-  all.forEach((t, i) => { result[t.name] = { w: t.w, l: t.l, pct: t.pct, rank: i + 1 }; });
+  all.forEach((t, i) => { result[t.name] = { w: t.w, l: t.l, pct: t.pct, diff: t.diff, rank: i + 1 }; });
   return result;
 }
 
@@ -2370,9 +2456,65 @@ function DraftLive({ draft, players }) {
   );
 }
 
+// Two panels per card: what a team DID (last completed season, including where
+// it finished) and what it FACES (this season's schedule, and the market's read).
+// Backward- and forward-looking numbers sit side by side without being confused
+// for each other.
+function TeamStats({ td, sos, odds, perfSeason, outlookSeason }) {
+  if (!td && !sos) return null;
+  const pct  = v => v.toFixed(3).replace(/^0/, "");
+  const diff = td && td.diff != null ? (td.diff > 0 ? `+${td.diff}` : String(td.diff)) : null;
+  return (
+    <div className="stat-blocks">
+      {td && (
+        <div className="stat-block">
+          <div className="stat-block-head">{perfSeason} performance</div>
+          <div className="team-stats">
+            <div className="stat-item"><span className="stat-label">W</span><span className="stat-val">{td.w}</span></div>
+            <div className="stat-item"><span className="stat-label">L</span><span className="stat-val">{td.l}</span></div>
+            <div className="stat-item"><span className="stat-label">PCT</span><span className="stat-val">{pct(td.pct)}</span></div>
+            <div className="stat-item"><span className="stat-label">Rank</span><span className="stat-val">#{td.rank}</span></div>
+            {diff !== null && (
+              <div className="stat-item" title="Points scored minus points allowed">
+                <span className="stat-label">Diff</span>
+                <span className={"stat-val " + (td.diff > 0 ? "pos" : td.diff < 0 ? "neg" : "")}>{diff}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {(sos || odds != null) && (
+        <div className="stat-block">
+          <div className="stat-block-head">{outlookSeason} outlook</div>
+          <div className="team-stats">
+            {sos && (
+              <div className="stat-item" title={`Average ${perfSeason} win% of this team's ${outlookSeason} opponents`}>
+                <span className="stat-label">SOS</span>
+                <span className="stat-val">{pct(sos.value)}</span>
+              </div>
+            )}
+            {sos && (
+              <div className="stat-item" title={`${sos.rank} hardest schedule of ${sos.of}`}>
+                <span className="stat-label">Sched</span>
+                <span className="stat-val">#{sos.rank}</span>
+              </div>
+            )}
+            {odds != null && (
+              <div className="stat-item" title="Market-implied chance of winning the Super Bowl">
+                <span className="stat-label">Title</span>
+                <span className="stat-val">{(odds * 100).toFixed(1)}%</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // The undrafted pool, grouped conference → division. Shared by the admin draft
 // (pick buttons wired) and the viewer watch view (no buttons, same information).
-function AvailableTeams({ taken, teamData, onPick, counts, current, statsLabel }) {
+function AvailableTeams({ taken, teamData, onPick, counts, current, statsLabel, sos, odds, perfSeason, outlookSeason }) {
   const confs = ["AFC", "NFC"].filter(conf =>
     DIVISIONS.some(d => d.conf === conf && d.teams.some(t => !taken.has(t))));
   if (!confs.length) return <div className="sub" style={{ padding: "10px 0" }}>Every team has been drafted.</div>;
@@ -2397,12 +2539,8 @@ function AvailableTeams({ taken, teamData, onPick, counts, current, statsLabel }
                           <img className="team-logo" src={teamLogo(t)} alt="" />
                           <div className="team-info">
                             <span className="tnm" title={t}>{t}</span>
-                            {td && <div className="team-stats">
-                              <div className="stat-item"><span className="stat-label">Wins</span><span className="stat-val">{td.w}</span></div>
-                              <div className="stat-item"><span className="stat-label">Losses</span><span className="stat-val">{td.l}</span></div>
-                              <div className="stat-item"><span className="stat-label">PCT</span><span className="stat-val">{td.pct.toFixed(3).replace(/^0/,"")}</span></div>
-                              <div className="stat-item"><span className="stat-label">Rank</span><span className="stat-val">#{td.rank}</span></div>
-                            </div>}
+                            <TeamStats td={td} sos={sos?.[t]} odds={odds?.[t]}
+                                       perfSeason={perfSeason} outlookSeason={outlookSeason} />
                           </div>
                         </div>
                         {onPick && (
@@ -2428,7 +2566,8 @@ function AvailableTeams({ taken, teamData, onPick, counts, current, statsLabel }
 // The draft screen itself. Admin and viewers render exactly this — the only
 // difference is that viewers pass no controls and no onPick, so they get the
 // same board, same roster grid, same available teams, minus the interaction.
-function DraftBoard({ draft, players, teamData, statsLabel, controls, onPick, counts }) {
+function DraftBoard({ draft, players, teamData, statsLabel, controls, onPick, counts,
+                      sos, odds, perfSeason, outlookSeason }) {
   const order      = (draft.order && draft.order.length) ? draft.order : players;
   const totalPicks = ROUNDS * players.length;
   const pickIndex  = draft.picks.length;
@@ -2452,6 +2591,7 @@ function DraftBoard({ draft, players, teamData, statsLabel, controls, onPick, co
       <DraftRosterPreview picks={draft.picks} order={order} current={current} />
       <div className="sec-head" style={{ marginTop: 14 }}>Still available — {32 - taken.size} teams</div>
       <AvailableTeams taken={taken} teamData={teamData} statsLabel={statsLabel}
+                      sos={sos} odds={odds} perfSeason={perfSeason} outlookSeason={outlookSeason}
                       onPick={onPick} counts={counts} current={current} />
     </div>
   );
@@ -2463,10 +2603,12 @@ function DraftWatch({ st, players, season }) {
   const draft = st.draft;
   const [teamData, setTeamData]     = useState(null);
   const [statsLabel, setStatsLabel] = useState("");
+  const [perfSeason, setPerfSeason] = useState(season - 1);
+  const { sos, odds } = useOutlook(season);
   useEffect(() => {
     let cancelled = false;
     fetchDraftStats(season)
-      .then(r => { if (!cancelled) { setTeamData(r.data); setStatsLabel(r.label); } })
+      .then(r => { if (!cancelled) { setTeamData(r.data); setStatsLabel(r.label); setPerfSeason(r.season); } })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [season]);
@@ -2482,6 +2624,7 @@ function DraftWatch({ st, players, season }) {
   return (
     <div>
       <DraftBoard draft={draft} players={players} teamData={teamData} statsLabel={statsLabel}
+                  sos={sos} odds={odds} perfSeason={perfSeason} outlookSeason={season}
                   controls={<span className="replay-badge">🔴 LIVE</span>} />
       <div className="viewer-banner" style={{ marginTop: 16 }}>
         👀 Following along — the board updates as picks are made. The commissioner
@@ -2503,10 +2646,12 @@ function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft, seaso
   useEffect(() => { syncDraft(draft); }, [draft]);
 
   const [statsLabel, setStatsLabel] = useState("");
+  const [perfSeason, setPerfSeason] = useState(season - 1);
+  const { sos, odds } = useOutlook(season);
   function loadESPN() {
     setTdLoading(true); setTdError(null);
     fetchDraftStats(season)
-      .then(r => { setTeamData(r.data); setStatsLabel(r.label); setTdLoading(false); })
+      .then(r => { setTeamData(r.data); setStatsLabel(r.label); setPerfSeason(r.season); setTdLoading(false); })
       .catch(e => { setTdError(e.message || "Failed"); setTdLoading(false); });
   }
   useEffect(loadESPN, [season]);
@@ -2606,6 +2751,7 @@ function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft, seaso
 
   return (
     <DraftBoard draft={draft} players={players} teamData={teamData} statsLabel={statsLabel}
+                sos={sos} odds={odds} perfSeason={perfSeason} outlookSeason={season}
                 onPick={pick} counts={counts}
                 controls={
                   <div className="row" style={{ gap: 8 }}>
