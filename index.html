@@ -1281,8 +1281,8 @@ function App({ initState, leagueInfo, remoteUpdate }) {
 
       {!canEdit && draftLive && activeTab !== "draft" && (
         <div className="viewer-banner draft-invite">
-          <span>🔴 <strong>A draft is happening right now.</strong> Watch it live and see which teams are still on the board.</span>
-          <button className="btn" onClick={() => setTab("draft")}>Join the draft →</button>
+          <span>🔴 <strong>Draft is live.</strong> See the board the commissioner sees — who's on the clock and every team still available.</span>
+          <button className="btn" onClick={() => setTab("draft")}>Draft is live →</button>
         </div>
       )}
 
@@ -2425,11 +2425,43 @@ function AvailableTeams({ taken, teamData, onPick, counts, current, statsLabel }
   );
 }
 
-// Read-only draft for everyone who isn't running it: the live board, plus what's
-// still on the table so people can plan their next pick while they wait.
+// The draft screen itself. Admin and viewers render exactly this — the only
+// difference is that viewers pass no controls and no onPick, so they get the
+// same board, same roster grid, same available teams, minus the interaction.
+function DraftBoard({ draft, players, teamData, statsLabel, controls, onPick, counts }) {
+  const order      = (draft.order && draft.order.length) ? draft.order : players;
+  const totalPicks = ROUNDS * players.length;
+  const pickIndex  = draft.picks.length;
+  const done       = draft.phase === "review" || pickIndex >= totalPicks;
+  const current    = done ? null : snakePlayer(order, pickIndex);
+  const round      = Math.min(Math.floor(pickIndex / players.length) + 1, ROUNDS);
+  const taken      = useMemo(() => new Set(draft.picks.map(p => p.team)), [draft.picks]);
+  return (
+    <div>
+      <div className="pickbar">
+        <div>
+          <div className="who">{done ? "✅ Draft complete" : `🟢 ${current} on the clock`}</div>
+          <div className="meta">
+            {done
+              ? "Waiting for the commissioner to start the season…"
+              : `Round ${round} of ${ROUNDS} · Pick ${pickIndex + 1} of ${totalPicks} · pick 💎 Treasure or 🗑️ Trash`}
+          </div>
+        </div>
+        {controls}
+      </div>
+      <DraftRosterPreview picks={draft.picks} order={order} current={current} />
+      <div className="sec-head" style={{ marginTop: 14 }}>Still available — {32 - taken.size} teams</div>
+      <AvailableTeams taken={taken} teamData={teamData} statsLabel={statsLabel}
+                      onPick={onPick} counts={counts} current={current} />
+    </div>
+  );
+}
+
+// Viewer's draft screen: the same DraftBoard the admin is looking at, with a
+// LIVE badge where their Undo/Restart controls sit.
 function DraftWatch({ st, players, season }) {
   const draft = st.draft;
-  const [teamData, setTeamData]   = useState(null);
+  const [teamData, setTeamData]     = useState(null);
   const [statsLabel, setStatsLabel] = useState("");
   useEffect(() => {
     let cancelled = false;
@@ -2439,7 +2471,6 @@ function DraftWatch({ st, players, season }) {
     return () => { cancelled = true; };
   }, [season]);
 
-  const taken = useMemo(() => new Set((draft?.picks || []).map(p => p.team)), [draft]);
   if (!draft || draft.phase === "order") {
     return (
       <div className="sub" style={{ padding: 20 }}>
@@ -2450,13 +2481,12 @@ function DraftWatch({ st, players, season }) {
   }
   return (
     <div>
-      <DraftLive draft={draft} players={players} />
-      <div className="viewer-banner" style={{ marginTop: 14 }}>
-        👀 Watching live — picks appear here as they happen. You can't pick from this
-        screen; tell the commissioner who you want.
+      <DraftBoard draft={draft} players={players} teamData={teamData} statsLabel={statsLabel}
+                  controls={<span className="replay-badge">🔴 LIVE</span>} />
+      <div className="viewer-banner" style={{ marginTop: 16 }}>
+        👀 Following along — the board updates as picks are made. The commissioner
+        does the picking; call out the team you want.
       </div>
-      <div className="sec-head" style={{ marginTop: 4 }}>Still available — {32 - taken.size} teams</div>
-      <AvailableTeams taken={taken} teamData={teamData} statsLabel={statsLabel} />
     </div>
   );
 }
@@ -2482,7 +2512,6 @@ function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft, seaso
   useEffect(loadESPN, [season]);
 
   const totalPicks = ROUNDS * players.length;
-  const taken  = useMemo(() => new Set(draft.picks.map(p => p.team)), [draft.picks]);
   const counts = useMemo(() => {
     const c = {}; players.forEach(p => c[p] = { treasure:0, trash:0 });
     draft.picks.forEach(({ player, type }) => c[player][type]++);
@@ -2491,7 +2520,6 @@ function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft, seaso
 
   const pickIndex = draft.picks.length;
   const current   = pickIndex < totalPicks ? snakePlayer(draft.order, pickIndex) : null;
-  const round     = Math.floor(pickIndex / players.length) + 1;
 
   function move(i, dir) {
     setDraft(d => { const o=[...d.order]; const j=i+dir; if(j<0||j>=o.length) return d; [o[i],o[j]]=[o[j],o[i]]; return {...d,order:o}; });
@@ -2577,18 +2605,14 @@ function Draft({ commitSeason, players, leagueId, initialDraft, syncDraft, seaso
   );
 
   return (
-    <div>
-      <div className="pickbar">
-        <div><div className="who">🟢 {current} on the clock</div><div className="meta">Round {round} of {ROUNDS} · Pick {pickIndex+1} of {totalPicks} · pick 💎 Treasure or 🗑️ Trash</div></div>
-        <div className="row" style={{gap:8}}>
-          <button className="btn ghost" onClick={undo} disabled={!draft.picks.length}>↩ Undo</button>
-          <button className="btn ghost" onClick={restart}>Restart</button>
-        </div>
-      </div>
-      <DraftRosterPreview picks={draft.picks} order={draft.order} current={current} />
-      <AvailableTeams taken={taken} teamData={teamData} statsLabel={statsLabel}
-                      onPick={pick} counts={counts} current={current} />
-    </div>
+    <DraftBoard draft={draft} players={players} teamData={teamData} statsLabel={statsLabel}
+                onPick={pick} counts={counts}
+                controls={
+                  <div className="row" style={{ gap: 8 }}>
+                    <button className="btn ghost" onClick={undo} disabled={!draft.picks.length}>↩ Undo</button>
+                    <button className="btn ghost" onClick={restart}>Restart</button>
+                  </div>
+                } />
   );
 }
 
