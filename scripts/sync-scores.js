@@ -131,6 +131,29 @@ function computeAdjusted(cumulative, roster) {
   return adjusted;
 }
 
+// What to do with a league when ESPN reports no completed games for its season.
+//
+// Two very different situations look alike here. An empty or partial standings
+// payload means the fetch told us nothing, so the stored records must stand. A
+// full slate of 32 teams at 0-0 is real data: the season simply hasn't kicked
+// off, and zeros are its true records — so a league still carrying another
+// season's numbers is stale, not correct, and skipping leaves last year's
+// scores on the board forever.
+//
+// Clearing is only safe when nothing would be lost: the stored records must
+// demonstrably belong to a different season, and no swap may have banked a
+// window yet (a banked row is season history this job must never guess at).
+// Everything else is left for the admin.
+function planUnstarted(cumulative, data, season) {
+  const teams = Object.keys(cumulative).length;
+  if (teams < 32) return { action: "skip", why: `ESPN returned ${teams} teams for ${season}, not a full slate` };
+  if (data.syncedSeason === season) return { action: "skip", why: `no completed games for ${season} yet` };
+  const banked = Object.values(data.roster || {}).some(pr =>
+    pr && ["treasures", "trash"].some(sec => (pr[sec]?.locked || []).length));
+  if (banked) return { action: "skip", why: `records predate ${season} but swap windows are banked — clear those by hand` };
+  return { action: "reset", why: `${season} hasn't kicked off; clearing records carried over from another season` };
+}
+
 async function main() {
   console.log(`Default season: ${DEFAULT_SEASON} (leagues without their own season field)`);
   const snap = await db.collection("leagues").get();
@@ -149,10 +172,20 @@ async function main() {
     const cumulative = cumCache[season];
     const games = Object.values(cumulative).reduce((a, [w, l]) => a + w + l, 0);
 
-    // Guard: never overwrite good data with an unstarted/empty season
-    if (!Object.keys(cumulative).length || games === 0) {
-      console.log(`Skip ${doc.id}: no completed games for ${season}`);
-      skipped++;
+    // Guard: an unstarted or unreadable season must never clobber good data,
+    // but it must not strand another season's records on the board either.
+    if (games === 0) {
+      const plan = planUnstarted(cumulative, data, season);
+      if (plan.action === "reset") {
+        const zeros = {};
+        for (const team of Object.keys(cumulative)) zeros[team] = [0, 0];
+        await doc.ref.update({ records: zeros, syncedSeason: season, lastSyncedAt: Date.now() });
+        updated++;
+        console.log(`Reset ${doc.id}: ${plan.why}`);
+      } else {
+        skipped++;
+        console.log(`Skip ${doc.id}: ${plan.why}`);
+      }
       continue;
     }
 
@@ -164,7 +197,7 @@ async function main() {
     // Regenerate banked values from real games, then derive active records.
     const roster = recomputeLocked(data.roster, windowCache[season]);
     const records = computeAdjusted(cumulative, roster);
-    await doc.ref.update({ roster, records, lastSyncedAt: Date.now() });
+    await doc.ref.update({ roster, records, syncedSeason: season, lastSyncedAt: Date.now() });
     updated++;
     console.log(`Updated ${doc.id} (season ${season})`);
   }
