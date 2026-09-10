@@ -351,7 +351,9 @@ function saveLocalState(id, st) { localStorage.setItem(leagueKey(id), JSON.strin
 function emptyState(players) {
   const roster = {};
   players.forEach(p => roster[p] = { treasures: { active:[], locked:[] }, trash: { active:[], locked:[] } });
-  return { players, records: {}, roster };
+  // Stamp the season so the doc says which year its records belong to, rather
+  // than leaving every reader (app and the scheduled sync) to guess a default.
+  return { players, season: ESPN_SEASON, records: {}, roster };
 }
 
 // ---- Team data ----

@@ -7,8 +7,26 @@
 // JSON). Writes via the Admin SDK, which bypasses security rules by design.
 
 import admin from "firebase-admin";
+import { readFileSync } from "node:fs";
 
-const DEFAULT_SEASON = 2025;
+// The app's ESPN_SEASON (index.html) is the single source of truth for "which
+// season is current". Read it from the checked-out repo instead of keeping a
+// second copy here — the copy rotted once already, and this job kept writing
+// 2025 standings into leagues the app was rendering as 2026.
+function resolveDefaultSeason() {
+  try {
+    const src = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+    const m = /const ESPN_SEASON\s*=\s*(\d{4})\s*;/.exec(src);
+    if (m) return Number(m[1]);
+    console.log("Couldn't find ESPN_SEASON in index.html; using fallback.");
+  } catch (e) {
+    console.log(`Couldn't read index.html (${e.message}); using fallback.`);
+  }
+  return FALLBACK_SEASON;
+}
+
+const FALLBACK_SEASON = 2026;  // only used if index.html can't be read
+const DEFAULT_SEASON = resolveDefaultSeason();
 
 const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || "{}");
 if (!sa.project_id) {
@@ -114,6 +132,7 @@ function computeAdjusted(cumulative, roster) {
 }
 
 async function main() {
+  console.log(`Default season: ${DEFAULT_SEASON} (leagues without their own season field)`);
   const snap = await db.collection("leagues").get();
   const cumCache = {};    // season -> cumulative standings
   const windowCache = {}; // season -> per-window records
