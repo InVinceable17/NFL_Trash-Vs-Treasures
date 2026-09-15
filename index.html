@@ -171,18 +171,75 @@
   .rankbadge.r1 { background: var(--treasure); color: #1a1a1a; }
   .foot-total { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
 
-  .bottom { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-top: 16px; align-items: start; }
-  @media (max-width: 700px) { .bottom { grid-template-columns: 1fr; } }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
   .panel h2 { font-size: 15px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .5px; }
-  table.standings { width: 100%; border-collapse: collapse; }
-  table.standings th, table.standings td { padding: 8px 8px; border-bottom: 1px solid var(--line); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
-  table.standings th { color: var(--muted); font-size: 11px; text-transform: uppercase; }
-  table.standings th.l, table.standings td.l { text-align: left; }
   .legend-item { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 13px; }
   .swatch { width: 26px; height: 16px; border-radius: 4px; border: 1px solid var(--line); }
   .swatch.pink { background: rgba(255,126,182,.4); border-color: var(--pink); }
   .swatch.teal { background: rgba(56,217,217,.4); border-color: var(--teal); }
+
+  /* Scoreboard — the league standings, promoted to the top of the dashboard. */
+  .sb { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+        padding: 14px 16px 6px; margin-bottom: 16px; }
+  .sb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+             flex-wrap: wrap; margin-bottom: 12px; }
+  .sb-head h2 { font-size: 15px; margin: 0; text-transform: uppercase; letter-spacing: .5px; }
+  .sb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px;
+             padding-bottom: 10px; }
+  .sb-card { display: flex; align-items: center; gap: 11px; background: var(--panel-2);
+             border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+  .sb-card.lead { border-color: var(--treasure); background: rgba(245,197,66,.09); }
+  .sb-pos { flex: none; width: 30px; height: 30px; border-radius: 8px; background: var(--line);
+            color: var(--text); font-size: 12px; font-weight: 800;
+            display: inline-flex; align-items: center; justify-content: center; }
+  .sb-card.lead .sb-pos { background: var(--treasure); color: #1a1a1a; }
+  .sb-who { min-width: 0; flex: 1; }
+  .sb-name { font-size: 14px; font-weight: 800; line-height: 1.2;
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sb-split { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .sb-split .t { color: var(--treasure); font-weight: 700; }
+  .sb-split .r { color: var(--trash); font-weight: 700; }
+  .sb-total { flex: none; font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .sb-gap { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* Weekly recap / preview */
+  .ws { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+        padding: 13px 15px; margin-bottom: 14px; }
+  .ws.inset { background: var(--panel-2); margin: 10px 10px 0; }
+  .ws-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+             flex-wrap: wrap; margin-bottom: 11px; }
+  .ws-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+  .ws-sub { font-size: 11.5px; color: var(--muted); }
+  .ws-rows { display: grid; gap: 6px; }
+  /* The bar is a read-at-a-glance proportion, not a measurement — cap it so a
+     wide screen doesn't stretch it across the whole panel. */
+  .ws-row { display: grid; grid-template-columns: minmax(58px, 120px) auto minmax(70px, 340px) 1fr;
+            align-items: center; gap: 10px; font-size: 12.5px; }
+  .ws-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ws-score { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 14px; }
+  .ws-of { color: var(--muted); font-weight: 600; font-size: 11.5px; }
+  .ws-bar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: #262b36; min-width: 60px; }
+  .ws-seg.hit  { background: #2f9e63; }
+  .ws-seg.miss { background: #3c4352; }
+  .ws-seg.pend { background: var(--accent); opacity: .55; }
+  .ws-note { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .ws-lead { color: var(--treasure); font-weight: 700; }
+  .ws-sec { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .ws-sec-h { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em;
+              color: var(--muted); margin-bottom: 7px; }
+  .ws-item { font-size: 12.5px; line-height: 1.55; margin-bottom: 7px; }
+  .ws-item:last-child { margin-bottom: 0; }
+  .ws-score-line { font-weight: 700; }
+  .ws-tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
+            margin-left: 5px; white-space: nowrap; }
+  .ws-tag.good { background: rgba(53,190,120,.16); color: #6ee7a8; }
+  .ws-tag.bad  { background: rgba(255,126,182,.14); color: var(--pink); }
+  .ws-tag.swing { background: rgba(124,92,255,.18); color: #b9a6ff; }
+  .ws-empty { font-size: 12px; color: var(--muted); }
+  @media (max-width: 520px) {
+    .ws-row { grid-template-columns: minmax(52px, auto) auto 1fr; }
+    .ws-note { grid-column: 1 / -1; padding-left: 0; }
+  }
 
   .draft-order-list { display: flex; flex-direction: column; gap: 8px; max-width: 420px; margin: 14px 0 18px; }
   .draft-order-item { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: grab; user-select: none; }
@@ -691,6 +748,113 @@ function gameStakes(game, own) {
   return out;
 }
 
+// ---- Weekly scoring ----
+// Whether one pick cashed in one game. A treasure scores when its team wins, a
+// trash pick when its team loses. A tie is neither, so it "pushes" — the point
+// was available and nobody got it, which is why it still counts as potential.
+function pickResult(game, team, kind) {
+  if (!game) return "bye";
+  if (!game.completed) return "pending";
+  if (game.awayScore === game.homeScore) return "push";
+  const won = team === game.away
+    ? game.awayScore > game.homeScore
+    : game.homeScore > game.awayScore;
+  return (kind === "treasure") === won ? "hit" : "miss";
+}
+
+// One week's scoreline for every player: what they earned out of what was on
+// offer. `roster` must be the roster as it stood THAT week (see getReplayRoster)
+// — picks move at the swap checkpoints, so today's roster misrates past weeks.
+//
+// potential counts every held team that played: a bye is not a missed point,
+// it's a point that never existed.
+function weekLines(games, roster, players) {
+  const byTeam = {};
+  for (const g of games) { byTeam[g.away] = g; byTeam[g.home] = g; }
+  const lines = {};
+  for (const player of players) {
+    const pr = roster?.[player];
+    const picks = [];
+    for (const [sec, kind] of [["treasures", "treasure"], ["trash", "trash"]]) {
+      for (const [team] of (pr?.[sec]?.active || [])) {
+        const game = byTeam[team];
+        picks.push({ team, kind, game, result: pickResult(game, team, kind) });
+      }
+    }
+    const count = r => picks.filter(x => x.result === r).length;
+    const byes = count("bye");
+    lines[player] = {
+      picks,
+      earned:    count("hit"),
+      missed:    count("miss") + count("push"),
+      pending:   count("pending"),
+      byes,
+      potential: picks.length - byes,
+    };
+  }
+  return lines;
+}
+
+// Blend this season's win rate with last season's so week 1 isn't a coin flip
+// and a December call isn't anchored to last year. PRIOR_GAMES is how many
+// games of evidence the previous season is worth.
+const PRIOR_GAMES = 6;
+function teamStrength(team, cur, prev) {
+  const c = cur?.[team], p = prev?.[team];
+  const played = c ? (c.w || 0) + (c.l || 0) : 0;
+  const curPct = played ? (c.pct ?? c.w / played) : 0.5;
+  const prevPct = p ? (p.pct ?? 0.5) : 0.5;
+  return (played * curPct + PRIOR_GAMES * prevPct) / (played + PRIOR_GAMES);
+}
+
+// A result counts as an upset when the loser was this much stronger. Tuned so a
+// genuinely even matchup never qualifies but a clear favourite going down does.
+const UPSET_GAP = 0.18;
+
+// Finished games the form guide got wrong, biggest surprise first, each tagged
+// with whose picks it swung. `own` must be that week's ownership map.
+function weekUpsets(games, strengthOf, own, limit = 3) {
+  const holders = (team, kind) => (own[team] || []).filter(o => o.kind === kind).map(o => o.player);
+  const out = [];
+  for (const g of games) {
+    if (!g.completed || g.awayScore === g.homeScore) continue;
+    const awayWon = g.awayScore > g.homeScore;
+    const winner = awayWon ? g.away : g.home;
+    const loser  = awayWon ? g.home : g.away;
+    const gap = strengthOf(loser) - strengthOf(winner);
+    if (gap < UPSET_GAP) continue;
+    out.push({
+      game: g, winner, loser, gap,
+      margin: Math.abs(g.awayScore - g.homeScore),
+      // The winner's treasure holders and the loser's trash holders cashed.
+      helped: [...holders(winner, "treasure"), ...holders(loser, "trash")],
+      hurt:   [...holders(winner, "trash"), ...holders(loser, "treasure")],
+    });
+  }
+  return out.sort((a, b) => b.gap - a.gap).slice(0, limit);
+}
+
+// The week's games that matter most to this league: every pick riding on them,
+// with a game one player holds both sides of weighted higher — those are the
+// 2-points-or-nothing swings.
+function keyGames(games, own, limit = 3) {
+  return games
+    .map(game => {
+      // Carry the team along: one player can hold both sides, and "Dee 💎, Dee 🗑️"
+      // tells you nothing about which way they need it to go.
+      const picks = [
+        ...(own[game.away] || []).map(o => ({ ...o, team: game.away })),
+        ...(own[game.home] || []).map(o => ({ ...o, team: game.home })),
+      ];
+      const stakes = gameStakes(game, own);
+      const swings = stakes.filter(s => !s.locked).length;
+      return { game, picks, stakes, weight: picks.length + swings * 2 };
+    })
+    .filter(x => x.weight > 0)
+    .sort((a, b) => b.weight - a.weight || (a.game.date || 0) - (b.game.date || 0))
+    .slice(0, limit);
+}
+
 async function fetchTeamData(season = ESPN_SEASON) {
   const url = `https://site.api.espn.com/apis/v2/sports/football/nfl/standings?season=${season}&seasontype=2`;
   const res = await fetch(url);
@@ -710,6 +874,16 @@ async function fetchTeamData(season = ESPN_SEASON) {
   const result = {};
   all.forEach((t, i) => { result[t.name] = { w: t.w, l: t.l, pct: t.pct, diff: t.diff, rank: i + 1, id: t.id }; });
   return result;
+}
+
+// Last season's finished standings, the baseline a young season's form guide
+// leans on. A finished season never changes, so one fetch covers the visit.
+let prevSeasonCache = null; // { season, data }
+async function fetchPrevSeason(season) {
+  if (prevSeasonCache && prevSeasonCache.season === season) return prevSeasonCache.data;
+  const data = await fetchTeamData(season - 1).catch(() => ({}));
+  prevSeasonCache = { season, data };
+  return data;
 }
 
 // ESPN team id -> display name, sourced from standings. The obvious endpoint for
@@ -1755,15 +1929,9 @@ function WeekBlock({ week, games, own, filter, label }) {
 }
 
 // ---- Scoreboard cards ----
-// How a finished game landed for one pick: a treasure cashes when its team won,
-// a trash pick when its team lost. Null while the game is live or still to come.
-function pickOutcome(game, team, kind) {
-  if (!game.completed || game.awayScore === game.homeScore) return null;
-  const won = team === game.away
-    ? game.awayScore > game.homeScore
-    : game.homeScore > game.awayScore;
-  return (kind === "treasure") === won ? "hit" : "miss";
-}
+// A pending pick and a tie both leave the chip unmarked — nothing was decided,
+// or it was decided and nobody scored.
+const chipOutcome = result => (result === "hit" || result === "miss" ? result : null);
 
 function PickChip({ team, pick, outcome }) {
   const wants = pick.kind === "treasure" ? "win" : "lose";
@@ -1807,7 +1975,7 @@ function GameCard({ game, own, filter, records }) {
         <div className="gc-id">
           {logo && <img className="gc-logo" src={logo} alt="" />}
           <div className="gc-meta">
-            <div className="gc-abbr" title={team}>{(TEAM_ABBREV[team] || team).toUpperCase()}</div>
+            <div className="gc-abbr" title={team}>{teamAbbr(team)}</div>
             <div className="gc-rec">{rec ? `${rec.w}-${rec.l}` : "\u00a0"}</div>
           </div>
         </div>
@@ -1817,7 +1985,7 @@ function GameCard({ game, own, filter, records }) {
             {picks.length
               ? picks.map(p => (
                   <PickChip key={p.player + p.kind} team={team} pick={p}
-                            outcome={pickOutcome(game, team, p.kind)} />))
+                            outcome={chipOutcome(pickResult(game, team, p.kind))} />))
               : <span className="pick-none">no picks</span>}
           </div>
         )}
@@ -1843,7 +2011,7 @@ function GameCard({ game, own, filter, records }) {
           <span key={s.player} className={"gc-stake" + (s.locked ? " locked" : "")}>
             {s.locked
               ? `🔒 ${s.player} holds both sides — 1 pt either way`
-              : `⚡ ${s.player} holds both sides — 2 pts if ${TEAM_ABBREV[s.wants] ? TEAM_ABBREV[s.wants].toUpperCase() : s.wants} wins`}
+              : `⚡ ${s.player} holds both sides — 2 pts if ${teamAbbr(s.wants)} wins`}
           </span>
         ))}
       </div>
@@ -1851,7 +2019,7 @@ function GameCard({ game, own, filter, records }) {
   );
 }
 
-function WeekCards({ week, games, own, filter, records, label }) {
+function WeekCards({ week, games, own, filter, records, prev, roster, players, label }) {
   const { shown, byes } = weekSlice(games, own, filter);
 
   return (
@@ -1859,6 +2027,10 @@ function WeekCards({ week, games, own, filter, records, label }) {
       <div className="sched-week-head">
         Week {week}{label ? <span className="sub" style={{ marginLeft: 8 }}>{label}</span> : null}
       </div>
+      {roster && (
+        <WeekSummary week={week} games={games} roster={roster} players={players}
+                     records={records} prev={prev} inset />
+      )}
       {shown.length === 0
         ? <div className="sub" style={{ padding: "10px 12px" }}>No games for this filter.</div>
         : <div className="gc-list">
@@ -1867,6 +2039,54 @@ function WeekCards({ week, games, own, filter, records, label }) {
       <ByeStrip byes={byes} own={own} filter={filter} />
     </div>
   );
+}
+
+// Team ratings behind the W-L lines and the upset calls. Both best-effort: a
+// missing feed costs the records line and drops the upset section, nothing more.
+function useTeamRatings(season) {
+  const [ratings, setRatings] = useState({ records: null, prev: null });
+  useEffect(() => {
+    let cancelled = false;
+    fetchTeamData(season)
+      .then(d => { if (!cancelled) setRatings(r => ({ ...r, records: d })); })
+      .catch(() => {});
+    fetchPrevSeason(season)
+      .then(d => { if (!cancelled) setRatings(r => ({ ...r, prev: d })); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [season]);
+  return ratings;
+}
+
+// The most recently finished week, for the dashboard recap: the current week
+// once every one of its games is final, otherwise the week before it. Both
+// reads come from caches the Schedule tab already fills.
+function useRecapWeek(season) {
+  const [recap, setRecap] = useState({ week: null, games: null });
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const allFinal = g => g.length > 0 && g.every(x => x.completed);
+      const anyFinal = g => g.some(x => x.completed);
+      try {
+        const cal = await fetchSeasonCalendar(season);
+        if (cancelled) return;
+        const now = weekForDate(cal);
+        const cur = await fetchWeekGames(season, now).catch(() => []);
+        if (cancelled) return;
+        if (allFinal(cur)) return setRecap({ week: now, games: cur });
+        const first = cal[0] ? cal[0].week : 1;
+        if (now <= first) return setRecap({ week: null, games: null });
+        const before = await fetchWeekGames(season, now - 1).catch(() => []);
+        if (cancelled) return;
+        setRecap(anyFinal(before) ? { week: now - 1, games: before } : { week: null, games: null });
+      } catch (e) {
+        if (!cancelled) setRecap({ week: null, games: null });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [season]);
+  return recap;
 }
 
 function Schedule({ st, players }) {
@@ -1881,21 +2101,19 @@ function Schedule({ st, players }) {
   const [loading, setLoading] = useState(true);
   const [err, setErr]         = useState(null);
   const [filter, setFilter]   = useState("all");
-  const [records, setRecords] = useState(null);  // real NFL W-L, for the card headers
+
+  // Real NFL W-L for the card headers, plus last season as the form baseline the
+  // upset calls need. These are ESPN's true season records, NOT st.records
+  // (which is only a team's record since its last swap).
+  const { records, prev } = useTeamRatings(season);
 
   const own = useMemo(() => ownershipMap(st.roster, players), [st.roster, players]);
 
-  // Season records for the scoreboard cards. Best-effort and independent of the
-  // games themselves — a slow or missing standings feed just drops the W-L line.
-  // Note these are ESPN's true season records, NOT st.records (which is only a
-  // team's record since its last swap).
-  useEffect(() => {
-    let cancelled = false;
-    fetchTeamData(season)
-      .then(d => { if (!cancelled) setRecords(d); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [season]);
+  // A week is scored against the roster as it stood THEN — picks move at the
+  // swap checkpoints, so today's roster would misread an earlier week.
+  const weekRoster = useMemo(
+    () => (viewWeek ? getReplayRoster(st.roster, viewWeek, players) : null),
+    [viewWeek, st.roster, players]);
 
   // Calendar first, then the current week's games. Everything else is on demand.
   useEffect(() => {
@@ -2024,7 +2242,7 @@ function Schedule({ st, players }) {
         byWeek[w.week]
           ? mode === "next"
             ? <WeekCards key={w.week} week={w.week} games={byWeek[w.week]} own={own} filter={filter}
-                         records={records}
+                         records={records} prev={prev} roster={weekRoster} players={players}
                          label={w.week === thisWeek && notStarted ? "season opener" : ""} />
             : <WeekBlock key={w.week} week={w.week} games={byWeek[w.week]} own={own} filter={filter}
                          label={w.week === thisWeek && notStarted ? "season opener" : ""} />
@@ -2092,11 +2310,201 @@ function Section({ section, label, records }) {
   );
 }
 
-function Dashboard({ st, ranking, players }) {
+// ========== Scoreboard ==========
+const teamAbbr = t => (TEAM_ABBREV[t] || t || "").toUpperCase();
+
+// Repeats collapse into a count: one player can hold both sides of a game, so
+// a single result can be worth two points to them.
+function tally(names) {
+  const n = {};
+  for (const x of names) n[x] = (n[x] || 0) + 1;
+  return Object.entries(n)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([player, count]) => (count > 1 ? `${player} \u00d7${count}` : player))
+    .join(", ");
+}
+
+// The league table, as the first thing you see. Each card is a player's total
+// with the two halves of their score under it.
+function Scoreboard({ st, ranking, players }) {
+  const leader = ranking.totals[ranking.order[0]] ?? 0;
+  return (
+    <div className="sb">
+      <div className="sb-head">
+        <h2>Scoreboard</h2>
+        <span className="ws-sub">💎 treasure wins + 🗑️ trash losses</span>
+      </div>
+      <div className="sb-grid">
+        {ranking.order.map(p => {
+          const rank = ranking.rank[p];
+          const behind = leader - ranking.totals[p];
+          return (
+            <div className={"sb-card" + (rank === 1 ? " lead" : "")} key={p}>
+              <span className="sb-pos">{ordinal(rank)}</span>
+              <div className="sb-who">
+                <div className="sb-name" title={p}>{p}</div>
+                <div className="sb-split">
+                  <span className="t">{winnersScore(p, st)} W</span>
+                  {" + "}
+                  <span className="r">{losersScore(p, st)} L</span>
+                  {behind > 0 && <span className="sb-gap">{"  \u00b7 "}{behind} back</span>}
+                </div>
+              </div>
+              <span className="sb-total">{ranking.totals[p]}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ========== Weekly recap / preview ==========
+// One week, read two ways. Once results are in it's a recap — what each player
+// took out of the week, and the results that swung it. Before kickoff it's a
+// preview — what's on offer, and the games carrying the most.
+function WeekSummary({ week, games, roster, players, records, prev, inset, label }) {
+  const own    = useMemo(() => ownershipMap(roster, players), [roster, players]);
+  const lines  = useMemo(() => weekLines(games, roster, players), [games, roster, players]);
+  const strengthOf = useMemo(() => {
+    const seen = new Map();
+    return t => {
+      if (!seen.has(t)) seen.set(t, teamStrength(t, records, prev));
+      return seen.get(t);
+    };
+  }, [records, prev]);
+
+  const decided = games.filter(g => g.completed).length;
+  const preview = decided === 0;
+  const ups  = useMemo(() => (preview ? [] : weekUpsets(games, strengthOf, own)),
+                       [preview, games, strengthOf, own]);
+  const keys = useMemo(() => (preview ? keyGames(games, own) : []), [preview, games, own]);
+
+  const order = [...players].sort((a, b) =>
+    preview ? lines[b].potential - lines[a].potential || a.localeCompare(b)
+            : lines[b].earned - lines[a].earned || lines[b].potential - lines[a].potential
+              || a.localeCompare(b));
+  const best = preview ? 0 : lines[order[0]]?.earned ?? 0;
+
+  const onOffer = players.reduce((a, p) => a + lines[p].potential, 0);
+  const taken   = players.reduce((a, p) => a + lines[p].earned, 0);
+
+  const kindsPlaying = (line, kind) =>
+    line.picks.filter(x => x.kind === kind && x.result !== "bye").length;
+
+  return (
+    <div className={"ws" + (inset ? " inset" : "")}>
+      <div className="ws-head">
+        <span className="ws-title">
+          Week {week} {label || (preview ? "preview" : decided < games.length ? "so far" : "recap")}
+        </span>
+        <span className="ws-sub">
+          {preview
+            ? `${onOffer} point${onOffer === 1 ? "" : "s"} up for grabs · ${games.length} games`
+            : `${taken} of ${onOffer} points taken · ${decided} of ${games.length} final`}
+        </span>
+      </div>
+
+      {onOffer === 0 && !preview
+        ? <div className="ws-empty">Nobody held a team that played this week.</div>
+        : <div className="ws-rows">
+            {order.map(p => {
+              const L = lines[p];
+              const notes = [];
+              if (!preview && L.pending) notes.push(`${L.pending} still to play`);
+              if (L.byes) notes.push(`${L.byes} on bye`);
+              return (
+                <div className="ws-row" key={p}>
+                  <span className={"ws-name" + (!preview && best > 0 && L.earned === best ? " ws-lead" : "")}>{p}</span>
+                  <span className="ws-score">
+                    {preview ? L.potential : L.earned}
+                    {!preview && <span className="ws-of">/{L.potential}</span>}
+                  </span>
+                  {preview
+                    ? <span className="ws-sub">
+                        {kindsPlaying(L, "treasure")} 💎 · {kindsPlaying(L, "trash")} 🗑️ in play
+                      </span>
+                    : <div className="ws-bar" title={`${L.earned} earned, ${L.missed} missed`}>
+                        <span className="ws-seg hit"  style={{ flexGrow: L.earned }} />
+                        <span className="ws-seg miss" style={{ flexGrow: L.missed }} />
+                        <span className="ws-seg pend" style={{ flexGrow: L.pending }} />
+                      </div>}
+                  <span className="ws-note">{notes.join(" · ")}</span>
+                </div>
+              );
+            })}
+          </div>}
+
+      {ups.length > 0 && (
+        <div className="ws-sec">
+          <div className="ws-sec-h">Biggest upsets</div>
+          {ups.map(u => {
+            const hi = Math.max(u.game.awayScore, u.game.homeScore);
+            const lo = Math.min(u.game.awayScore, u.game.homeScore);
+            return (
+              <div className="ws-item" key={u.game.id}>
+                <span className="ws-score-line">{teamAbbr(u.winner)} {hi}–{lo} {teamAbbr(u.loser)}</span>
+                {" — "}{teamAbbr(u.loser)} were the stronger side on form
+                {u.helped.length > 0 && <span className="ws-tag good">cashed: {tally(u.helped)}</span>}
+                {u.hurt.length   > 0 && <span className="ws-tag bad">cost: {tally(u.hurt)}</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {keys.length > 0 && (
+        <div className="ws-sec">
+          <div className="ws-sec-h">Games to watch</div>
+          {keys.map(k => (
+            <div className="ws-item" key={k.game.id}>
+              <span className="ws-score-line">{teamAbbr(k.game.away)} @ {teamAbbr(k.game.home)}</span>
+              {" — "}
+              {k.picks.map((o, i) => (
+                <React.Fragment key={o.player + o.kind + i}>
+                  {i > 0 && ", "}
+                  {o.player} {o.kind === "treasure" ? "💎" : "🗑️"}{teamAbbr(o.team)}
+                </React.Fragment>
+              ))}
+              {k.stakes.filter(x => !x.locked).map(x => (
+                <span className="ws-tag swing" key={x.player}>
+                  2 pts or none for {x.player}
+                </span>
+              ))}
+              {k.stakes.filter(x => x.locked).map(x => (
+                <span className="ws-tag swing" key={x.player}>
+                  1 pt guaranteed for {x.player}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// `recap` is off for the Swap tab's after-this-swap preview, where a panel about
+// a week already played would only distract from the totals it's showing.
+function Dashboard({ st, ranking, players, recap: showRecap = true }) {
   const draftLive = st.draft && (st.draft.phase === "draft" || st.draft.phase === "review");
+  const season = st.season || ESPN_SEASON;
+  const { records, prev } = useTeamRatings(season);
+  const recap = useRecapWeek(season);
+  // Picks move at the swap checkpoints, so a past week has to be scored against
+  // the roster as it stood then, not today's.
+  const recapRoster = useMemo(
+    () => (recap.week ? getReplayRoster(st.roster, recap.week, players) : null),
+    [recap.week, st.roster, players]);
+
   return (
     <div>
       {draftLive && <DraftLive draft={st.draft} players={players} />}
+      <Scoreboard st={st} ranking={ranking} players={players} />
+      {showRecap && recap.games && recapRoster && (
+        <WeekSummary week={recap.week} games={recap.games} roster={recapRoster}
+                     players={players} records={records} prev={prev} />
+      )}
       <div className="dash">
         {players.map(p => {
           const data = st.roster[p];
@@ -2115,30 +2523,11 @@ function Dashboard({ st, ranking, players }) {
           );
         })}
       </div>
-      <div className="bottom">
-        <div className="panel">
-          <h2>Standings</h2>
-          <table className="standings">
-            <thead><tr><th className="l">Pos</th><th className="l">Player</th><th>W's from Winners</th><th>L's from Losers</th><th>Total</th></tr></thead>
-            <tbody>
-              {ranking.order.map(p => (
-                <tr key={p}>
-                  <td className="l"><span className={"rankbadge" + (ranking.rank[p] === 1 ? " r1" : "")}>{ordinal(ranking.rank[p])}</span></td>
-                  <td className="l" style={{ fontWeight: 700 }}>{p}</td>
-                  <td style={{ color: "var(--treasure)" }}>{winnersScore(p, st)}</td>
-                  <td style={{ color: "var(--trash)" }}>{losersScore(p, st)}</td>
-                  <td style={{ fontWeight: 800 }}>{ranking.totals[p]}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="panel">
-          <h2>Legend</h2>
-          <div className="legend-item"><span className="swatch pink"></span> Team swapped in after Weeks 1-6</div>
-          <div className="legend-item"><span className="swatch teal"></span> Team swapped in after Weeks 7-12</div>
-          <div className="sub" style={{ marginTop: 8 }}>Greyed "locked" rows are the original picks' banked performance — they still count toward the total.</div>
-        </div>
+      <div className="panel" style={{ marginTop: 16 }}>
+        <h2>Legend</h2>
+        <div className="legend-item"><span className="swatch pink"></span> Team swapped in after Weeks 1-6</div>
+        <div className="legend-item"><span className="swatch teal"></span> Team swapped in after Weeks 7-12</div>
+        <div className="sub" style={{ marginTop: 8 }}>Greyed "locked" rows are the original picks' banked performance — they still count toward the total.</div>
       </div>
     </div>
   );
@@ -2638,7 +3027,8 @@ function Swap({ st, setSt, players, replayRecords }) {
             <span className="replay-badge">👁 PREVIEW</span>
             <span className="sub">How the board looks after applying — totals hold; teams move sections and lock their current points.</span>
           </div>
-          <Dashboard st={{ ...previewState, draft: null }} ranking={rankingFor(previewState)} players={players} />
+          <Dashboard st={{ ...previewState, draft: null }} ranking={rankingFor(previewState)}
+                     players={players} recap={false} />
         </div>
       )}
     </div>
