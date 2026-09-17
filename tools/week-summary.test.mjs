@@ -92,6 +92,74 @@ const midWeek = weekLines([game(DEN, NYG, 7, 3, false)], roster, ["Vince"]);
 assert.equal(midWeek.Vince.pending, 2, "both sides of an unfinished game are pending");
 assert.equal(midWeek.Vince.earned + midWeek.Vince.missed, 0, "nothing is decided yet");
 
+// ---- weekLines: holding both sides of one game ----
+// Same category on both sides caps the game at one point however it falls — one
+// of the two teams has to win and the other has to lose. The ceiling is 1, not 2.
+const bothTrash = {
+  Sam: { treasures: { active: [], locked: [] },
+         trash:     { active: [[DEN, null], [NYG, null]], locked: [] } },
+};
+const sam = weekLines([g1], bothTrash, ["Sam"])["Sam"];   // DEN 24, NYG 10
+assert.equal(sam.potential, 1, "two trash picks on one game can only yield one point");
+assert.equal(sam.earned, 1, "NYG lost, so that half cashed");
+assert.equal(sam.missed, 0, "the other half was never winnable — not a miss");
+assert.equal(sam.guaranteed, 1, "one point was banked before kickoff");
+assert.equal(sam.picks.length, 2, "both picks are still listed for the detail views");
+
+// Same holds for two treasures on one game.
+const bothTreasure = {
+  Sam: { treasures: { active: [[DEN, null], [NYG, null]], locked: [] },
+         trash:     { active: [], locked: [] } },
+};
+const samT = weekLines([g1], bothTreasure, ["Sam"])["Sam"];
+assert.deepEqual([samT.potential, samT.earned, samT.missed], [1, 1, 0],
+  "DEN won, so one treasure cashed and the ceiling was 1");
+
+// Before kickoff the pair is one pending point, not two.
+const samPre = weekLines([game(DEN, NYG, 0, 0, false)], bothTrash, ["Sam"])["Sam"];
+assert.deepEqual([samPre.potential, samPre.pending], [1, 1],
+  "an undecided pair is a single point in the balance");
+
+// A tie pays nobody, so the guaranteed point is the one thing that can be lost.
+const samTie = weekLines([game(DEN, NYG, 17, 17)], bothTrash, ["Sam"])["Sam"];
+assert.deepEqual([samTie.potential, samTie.earned, samTie.missed], [1, 0, 1],
+  "a tie is neither a win nor a loss — the one available point goes unclaimed");
+
+// OPPOSITE categories are untouched: those really do pay 2 or nothing.
+const opposed = {
+  Sam: { treasures: { active: [[DEN, null]], locked: [] },
+         trash:     { active: [[NYG, null]], locked: [] } },
+};
+const samO = weekLines([g1], opposed, ["Sam"])["Sam"];
+assert.deepEqual([samO.potential, samO.earned, samO.guaranteed], [2, 2, 0],
+  "treasure on the winner + trash on the loser is a full 2 points");
+const samOLost = weekLines([game(DEN, NYG, 10, 24)], opposed, ["Sam"])["Sam"];
+assert.deepEqual([samOLost.potential, samOLost.earned, samOLost.missed], [2, 0, 2],
+  "...and nothing at all when it goes the other way");
+
+// A full 8-pick roster with one same-category pair tops out at 7, not 8. The
+// other six picks each face an opponent nobody holds, so DEN/NYG is the only
+// game that collapses.
+const capped = {
+  Sam: {
+    treasures: { active: [[KC, null], [CLE, null], [LAR, null], [SF, null]], locked: [] },
+    trash:     { active: [[DEN, null], [NYG, null], ["Chicago Bears", null], ["Dallas Cowboys", null]], locked: [] },
+  },
+};
+const samWeek = weekLines([
+  g1,                                             // DEN + NYG, both trash -> collapses
+  game(KC, "Miami Dolphins", 30, 3),
+  game(CLE, "New York Jets", 10, 17),
+  game(LAR, "Buffalo Bills", 21, 20),
+  game(SF, "Green Bay Packers", 14, 28),
+  game("Chicago Bears", "Minnesota Vikings", 6, 9),
+  game("Dallas Cowboys", "Detroit Lions", 24, 21),
+], capped, ["Sam"])["Sam"];
+assert.equal(samWeek.potential, 7,
+  "8 teams playing, but DEN/NYG are both trash in one game — the week's ceiling is 7");
+assert.equal(samWeek.guaranteed, 1);
+assert.ok(samWeek.earned <= samWeek.potential, "a player can never out-earn their ceiling");
+
 // ---- teamStrength ----
 const prev = { [KC]: { pct: 0.875 }, [CLE]: { pct: 0.188 } };
 // With no games played, the previous season carries the whole estimate.

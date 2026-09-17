@@ -766,8 +766,9 @@ function pickResult(game, team, kind) {
 // offer. `roster` must be the roster as it stood THAT week (see getReplayRoster)
 // — picks move at the swap checkpoints, so today's roster misrates past weeks.
 //
-// potential counts every held team that played: a bye is not a missed point,
-// it's a point that never existed.
+// potential is the most a player could actually have scored, which is not the
+// same as their number of picks: a bye is a point that never existed, and two
+// picks on the same game in the same category can only ever yield one.
 function weekLines(games, roster, players) {
   const byTeam = {};
   for (const g of games) { byTeam[g.away] = g; byTeam[g.home] = g; }
@@ -781,15 +782,36 @@ function weekLines(games, roster, players) {
         picks.push({ team, kind, game, result: pickResult(game, team, kind) });
       }
     }
-    const count = r => picks.filter(x => x.result === r).length;
-    const byes = count("bye");
+    // Holding BOTH sides of one game in the SAME category caps that game at a
+    // single point however it falls: one of the two teams must win and the other
+    // must lose. Both picks are real, but only one point was ever on offer, so
+    // one of them drops out of the count — the half that was never winnable.
+    // (Opposite categories are left alone: those pay 2 or nothing, so both
+    // picks are genuinely live.)
+    const dead = new Set();
+    const firstOfPair = {};
+    for (const pick of picks) {
+      if (!pick.game) continue;
+      const key = pick.game.id + "|" + pick.kind;
+      const other = firstOfPair[key];
+      // At most one of a same-category pair can cash, so drop a non-hit half.
+      if (other) dead.add(other.result === "hit" ? pick : other);
+      else firstOfPair[key] = pick;
+    }
+
+    const live  = picks.filter(x => !dead.has(x));
+    const count = r => live.filter(x => x.result === r).length;
+    const byes  = count("bye");
     lines[player] = {
       picks,
       earned:    count("hit"),
       missed:    count("miss") + count("push"),
       pending:   count("pending"),
       byes,
-      potential: picks.length - byes,
+      potential: live.length - byes,
+      // One point per collapsed pair is banked whoever wins — barring the tie
+      // that pays nobody.
+      guaranteed: dead.size,
     };
   }
   return lines;
@@ -2412,6 +2434,9 @@ function WeekSummary({ week, games, roster, players, records, prev, inset, label
               const L = lines[p];
               const notes = [];
               if (!preview && L.pending) notes.push(`${L.pending} still to play`);
+              // Explains a ceiling lower than the teams-in-play count: holding
+              // both sides of a game in one category banks a point and caps it.
+              if (preview && L.guaranteed) notes.push(`${L.guaranteed} guaranteed`);
               if (L.byes) notes.push(`${L.byes} on bye`);
               return (
                 <div className="ws-row" key={p}>
