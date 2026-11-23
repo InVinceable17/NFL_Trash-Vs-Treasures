@@ -213,15 +213,19 @@
   .ws-rows { display: grid; gap: 6px; }
   /* The bar is a read-at-a-glance proportion, not a measurement — cap it so a
      wide screen doesn't stretch it across the whole panel. */
-  .ws-row { display: grid; grid-template-columns: minmax(58px, 120px) auto minmax(70px, 340px) 1fr;
+  .ws-row { display: grid; grid-template-columns: minmax(58px, 120px) auto minmax(70px, 150px) 1fr;
             align-items: center; gap: 10px; font-size: 12.5px; }
   .ws-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ws-score { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 14px; }
   .ws-of { color: var(--muted); font-weight: 600; font-size: 11.5px; }
-  .ws-bar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: #262b36; min-width: 60px; }
-  .ws-seg.hit  { background: #2f9e63; }
-  .ws-seg.miss { background: #3c4352; }
-  .ws-seg.pend { background: var(--accent); opacity: .55; }
+  /* One tick per point on offer. The bar's LENGTH is the size of a player's
+     week, so a bye just makes it shorter and needs no footnote, and its ticks
+     can be counted: green won, grey lost, accent still to play. */
+  .ws-bar { display: flex; gap: 3px; align-items: center; min-width: 0; }
+  .ws-tick { flex: 0 1 15px; min-width: 4px; height: 9px; border-radius: 3px; background: #2b3140; }
+  .ws-tick.hit  { background: #2f9e63; }
+  .ws-tick.miss { background: #3c4352; }
+  .ws-tick.pend { background: var(--accent); opacity: .5; }
   .ws-note { font-size: 11px; color: var(--muted); white-space: nowrap; }
   .ws-lead { color: var(--treasure); font-weight: 700; }
   .ws-sec { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
@@ -2480,12 +2484,23 @@ function WeekSummary({ week, games, roster, players, records, prev, inset, label
         : <div className="ws-rows">
             {order.map(p => {
               const L = lines[p];
+              // One tick per point available: earned, then lost, then still to
+              // come. These three always add up to potential, so the bar is
+              // exactly as long as the player's week is big.
+              const ticks = [
+                ...Array(L.earned).fill("hit"),
+                ...Array(L.missed).fill("miss"),
+                ...Array(L.pending).fill("pend"),
+              ];
               const notes = [];
-              if (!preview && L.pending) notes.push(`${L.pending} still to play`);
-              // Explains a ceiling lower than the teams-in-play count: holding
+              if (preview) notes.push(`${kindsPlaying(L, "treasure")} 💎 · ${kindsPlaying(L, "trash")} 🗑️`);
+              else if (L.pending) notes.push(`${L.pending} still to play`);
+              // Explains a bar shorter than the teams-in-play count: holding
               // both sides of a game in one category banks a point and caps it.
               if (preview && L.guaranteed) notes.push(`${L.guaranteed} guaranteed`);
-              if (L.byes) notes.push(`${L.byes} on bye`);
+              const detail = [
+                `${L.earned} won`, `${L.missed} lost`, `${L.pending} to play`,
+              ].join(", ") + ` — of ${L.potential} on offer` + (L.byes ? `, ${L.byes} on bye` : "");
               return (
                 <div className="ws-row" key={p}>
                   <span className={"ws-name" + (!preview && best > 0 && L.earned === best ? " ws-lead" : "")}>{p}</span>
@@ -2493,15 +2508,9 @@ function WeekSummary({ week, games, roster, players, records, prev, inset, label
                     {preview ? L.potential : L.earned}
                     {!preview && <span className="ws-of">/{L.potential}</span>}
                   </span>
-                  {preview
-                    ? <span className="ws-sub">
-                        {kindsPlaying(L, "treasure")} 💎 · {kindsPlaying(L, "trash")} 🗑️ in play
-                      </span>
-                    : <div className="ws-bar" title={`${L.earned} earned, ${L.missed} missed`}>
-                        <span className="ws-seg hit"  style={{ flexGrow: L.earned }} />
-                        <span className="ws-seg miss" style={{ flexGrow: L.missed }} />
-                        <span className="ws-seg pend" style={{ flexGrow: L.pending }} />
-                      </div>}
+                  <div className="ws-bar" title={detail}>
+                    {ticks.map((state, i) => <span key={i} className={"ws-tick " + state} />)}
+                  </div>
                   <span className="ws-note">{notes.join(" · ")}</span>
                 </div>
               );
