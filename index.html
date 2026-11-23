@@ -940,15 +940,16 @@ function gameAngles(game, own) {
   return { picks, swings, h2h, weight: 2 * (swings.length + h2h.length) };
 }
 
-// The games carrying a real swing this week, biggest first then by kickoff.
-// Weeks with nothing big in them show nothing rather than padding the list with
-// games that merely have picks on them.
-function keyGames(games, own, limit = 3) {
+// Every game this week that can swing two points, in kickoff order. There is no
+// cap: a week with six of them has six worth watching, and trimming to a top
+// three would hide swings that matter just as much as the ones kept. A week
+// with none shows nothing rather than padding the list out with games that
+// merely have picks on them.
+function keyGames(games, own) {
   return games
     .map(game => ({ game, ...gameAngles(game, own) }))
     .filter(x => x.weight > 0)
-    .sort((a, b) => b.weight - a.weight || (a.game.date || 0) - (b.game.date || 0))
-    .slice(0, limit);
+    .sort((a, b) => b.weight - a.weight || (a.game.date || 0) - (b.game.date || 0));
 }
 
 async function fetchTeamData(season = ESPN_SEASON) {

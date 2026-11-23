@@ -286,7 +286,16 @@ const ranked = keyGames([g1, game(KC, CLE, 0, 0, false)], ownerOf(mixed, ["Ann",
 assert.deepEqual(ranked.map(x => x.weight), [2, 2], "a swing and a rivalry weigh the same");
 assert.ok(ranked.every(x => x.h2h.length || x.swings.length),
   "every callout has a reason attached");
-assert.equal(keyGames([g1, game(KC, CLE, 0, 0, false)],
-                      ownerOf(mixed, ["Ann", "Bob", "Cid"]), 1).length, 1, "limit caps the list");
+// No cap: every qualifying game comes back, however many there are.
+const manyOwn = ownerOf({
+  Ann: solo(DEN, "trash"), Bob: solo(NYG, "trash"),       // rivalry
+  Cid: solo(KC, "treasure"), Dee: solo(CLE, "treasure"),  // rivalry
+  Eve: { treasures: { active: [[LAR, null]], locked: [] },
+         trash:     { active: [[SF, null]], locked: [] } },  // swing on LAR@SF
+}, ["Ann", "Bob", "Cid", "Dee", "Eve"]);
+const manyGames = [g1, game(KC, CLE, 0, 0, false), game(LAR, SF, 0, 0, false),
+                   game(CHI, DAL, 0, 0, false)];           // CHI/DAL held by nobody
+assert.equal(keyGames(manyGames, manyOwn).length, 3,
+  "all three swing games are listed, not just a top few");
 
 console.log("PASS — weekly summary logic (pickResult, weekLines, teamStrength, weekUpsets, keyGames)");
