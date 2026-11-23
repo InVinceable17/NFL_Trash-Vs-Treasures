@@ -340,12 +340,27 @@ assert.equal(swingLabel(game(DEN, NYG, 17, 17), { player: "Ann", wants: DEN }),
 const rivals = [{ player: "Ann", kind: "trash", team: DEN },
                 { player: "Bob", kind: "trash", team: NYG }];
 const pair = { players: ["Ann", "Bob"], kind: "trash" };
-assert.equal(h2hLabel(g1, pair, rivals), "🗑️ trash battle: Bob beat Ann",
-  "NYG lost, so Bob's trash pick cashed");
+// Ann holds DEN (the away team, shown left), Bob holds NYG (home, right). NYG
+// lost so Bob cashed — but Ann is still named first, because she is on the left.
+assert.equal(h2hLabel(g1, pair, rivals), "🗑️ trash battle: Ann lost to Bob",
+  "the left-hand holder leads even when they lost");
 assert.equal(h2hLabel(game(DEN, NYG, 0, 0, false), pair, rivals), "🗑️ trash battle: Ann vs Bob",
   "before kickoff it just names the two");
 assert.equal(h2hLabel(game(DEN, NYG, 17, 17), pair, rivals),
   "🗑️ trash battle: Ann vs Bob — tied, no points", "a tie resolves nothing");
+
+// ---- rivalry order follows the card, not the alphabet ----
+// Zed holds the away team and Abe the home one, so Zed is named first despite
+// sorting last — the names then line up with the pills beneath them.
+const reversed = one(g1, { Zed: solo(DEN, "trash"), Abe: solo(NYG, "trash") }, ["Zed", "Abe"]);
+assert.deepEqual(reversed[0].h2h, [{ players: ["Zed", "Abe"], kind: "trash" }],
+  "away-team holder first, home-team holder second");
+assert.equal(h2hLabel(g1, reversed[0].h2h[0], reversed[0].picks),
+  "🗑️ trash battle: Zed lost to Abe", "and the label keeps that order");
+// Declaring the roster the other way round must not change the order either.
+const sameAgain = one(g1, { Abe: solo(NYG, "trash"), Zed: solo(DEN, "trash") }, ["Abe", "Zed"]);
+assert.deepEqual(sameAgain[0].h2h[0].players, ["Zed", "Abe"],
+  "order comes from the game, not from how the roster was written");
 
 // A treasure battle is named for its own category.
 const tPair = { players: ["Ann", "Bob"], kind: "treasure" };

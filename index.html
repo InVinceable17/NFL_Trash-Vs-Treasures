@@ -951,8 +951,11 @@ function gameAngles(game, own) {
       const a = live[i], b = live[j];
       if (a.player === b.player) continue;
       if (a.team === b.team || a.kind !== b.kind) continue;
-      const pair = [a.player, b.player].sort();
-      const key = pair.join("\u0000");
+      // picks run away-team-first, and a rivalry needs the two on opposite
+      // teams, so `a` always holds the left side of the card and `b` the right.
+      // Keep that order — the names then line up with the pills under them.
+      const pair = [a.player, b.player];
+      const key = [...pair].sort().join("\u0000");
       if (seen.has(key)) continue;          // one rivalry, however many picks show it
       seen.add(key);
       // Same category on both sides is what makes it a rivalry, so the pair
@@ -980,17 +983,21 @@ function swingLabel(game, swing) {
 const battleName = kind => (kind === "treasure" ? "💎 treasure battle" : "🗑️ trash battle");
 const battleClass = kind => (kind === "treasure" ? "h2h-treasure" : "h2h-trash");
 
+// `a` holds the left-hand team and `b` the right, always — including after the
+// result, where naming the winner first would scramble that. So the verb moves
+// instead of the names: A beat B, or A lost to B.
 function h2hLabel(game, pair, picks) {
   const [a, b] = pair.players;
   const battle = battleName(pair.kind);
+  const undecided = `${battle}: ${a} vs ${b}`;
   if (!game.completed || game.awayScore === game.homeScore) {
     // A tie pays neither side, so the rivalry simply never resolved.
-    return `${battle}: ${a} vs ${b}` + (game.completed ? " — tied, no points" : "");
+    return undecided + (game.completed ? " — tied, no points" : "");
   }
-  const won = picks.find(o => pair.players.includes(o.player)
+  const cashed = picks.find(o => pair.players.includes(o.player)
     && pickResult(game, o.team, o.kind) === "hit");
-  return won ? `${battle}: ${won.player} beat ${won.player === a ? b : a}`
-             : `${battle}: ${a} vs ${b}`;
+  if (!cashed) return undecided;
+  return `${battle}: ${a} ${cashed.player === a ? "beat" : "lost to"} ${b}`;
 }
 
 // A form rating per team, computed once per lookup. Shared by the summary and
