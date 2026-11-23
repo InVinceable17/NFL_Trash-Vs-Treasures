@@ -30,7 +30,8 @@ const { pickResult, weekLines, teamStrength, weekUpsets, keyGames, ownershipMap,
   (0, eval)(`(() => {
     ${constant("PRIOR_GAMES")} ${constant("UPSET_GAP")}
     ${slice("pickResult")} ${slice("weekLines")} ${slice("teamStrength")}
-    ${slice("gameStakes")} ${slice("weekUpsets")} ${slice("keyGames")} ${slice("ownershipMap")}
+    ${slice("gameStakes")} ${slice("weekUpsets")} ${slice("gameAngles")} ${slice("keyGames")}
+    ${slice("ownershipMap")}
     return { pickResult, weekLines, teamStrength, weekUpsets, keyGames, ownershipMap, UPSET_GAP };
   })()`);
 
@@ -199,16 +200,87 @@ assert.equal(many.length, 1, "limit caps the list");
 assert.equal(many[0].winner, CLE, "the 0.8 gap outranks the 0.25 gap");
 
 // ---- keyGames ----
-// Vince holds DEN (treasure) and NYG (trash) — both sides of g1, a 2-pt swing.
+const ownerOf = (roster, names) => ownershipMap(roster, names);
+const one = (g, roster, names) => keyGames([g], ownerOf(roster, names));
+const solo = (team, kind) => ({
+  treasures: { active: kind === "treasure" ? [[team, null]] : [], locked: [] },
+  trash:     { active: kind === "trash"    ? [[team, null]] : [], locked: [] },
+});
+
+// Vince holds DEN (treasure) and NYG (trash) — both sides of g1, a 2-pt swing —
+// and Haley's DEN trash pick is opposed to both halves of it.
 const keys = keyGames(week, own);
-assert.equal(keys[0].game.id, g1.id, "the game one player holds both sides of leads");
-assert.equal(keys[0].stakes.length, 1, "Vince has a stake in it");
-assert.equal(keys[0].stakes[0].locked, false, "opposite categories -> a real swing");
-assert.equal(keys[0].stakes[0].wants, DEN, "he needs the treasure side to win");
-// weight = 3 picks on it (Vince DEN, Vince NYG, Haley DEN) + 2 for the swing
-assert.equal(keys[0].weight, 5);
+assert.equal(keys[0].game.id, g1.id, "the game carrying the most leads");
+assert.deepEqual(keys[0].swings, [{ player: "Vince", wants: DEN }],
+  "opposite categories on both sides is a real swing");
+assert.deepEqual(keys[0].h2h, [{ players: ["Haley", "Vince"] }],
+  "one rivalry, even though two different pick pairings show it");
+// stake 2 (Vince) + 1 (Haley), +2 for the swing, +2 for the head-to-head
+assert.equal(keys[0].weight, 7);
 // games nobody holds are dropped entirely. SF is only a LOCKED row of Vince's,
 // which ownershipMap treats as history — so this game has no live picks on it.
 assert.deepEqual(keyGames([game(SF, "Chicago Bears", 0, 0, false)], own), []);
+
+// ---- keyGames: head-to-heads ----
+// Two trash picks on opposite sides: one of the two teams has to lose, so
+// exactly one of the two players scores.
+const trashVsTrash = { Ann: solo(DEN, "trash"), Bob: solo(NYG, "trash") };
+const tvt = one(g1, trashVsTrash, ["Ann", "Bob"]);
+assert.deepEqual(tvt[0].h2h, [{ players: ["Ann", "Bob"] }], "trash vs trash is a head-to-head");
+assert.equal(tvt[0].weight, 4, "stake 1 each, +2 for the rivalry");
+
+// Two treasure picks on opposite sides: same deal, one winner.
+const treasureVsTreasure = { Ann: solo(DEN, "treasure"), Bob: solo(NYG, "treasure") };
+assert.deepEqual(one(g1, treasureVsTreasure, ["Ann", "Bob"])[0].h2h, [{ players: ["Ann", "Bob"] }],
+  "treasure vs treasure is a head-to-head");
+
+// The same team as one player's treasure and another's trash is also zero-sum.
+const splitOnOne = { Ann: solo(DEN, "treasure"), Bob: solo(DEN, "trash") };
+assert.deepEqual(one(g1, splitOnOne, ["Ann", "Bob"])[0].h2h, [{ players: ["Ann", "Bob"] }],
+  "disagreeing about one team is a head-to-head too");
+
+// Treasure on one side + trash on the other is NOT opposed: both want the same
+// result, so they rise and fall together.
+const aligned = { Ann: solo(DEN, "treasure"), Bob: solo(NYG, "trash") };
+const al = one(g1, aligned, ["Ann", "Bob"]);
+assert.deepEqual(al[0].h2h, [], "treasure on one side and trash on the other move together");
+assert.equal(al[0].weight, 2, "two live picks, no rivalry bonus");
+
+// ---- keyGames: a lock is the opposite of worth watching ----
+// Marcus holds both sides as trash: one has to lose, so he banks exactly 1
+// however it goes. Nothing rides on the result, so the game is not flagged.
+const locked = {
+  Marcus: { treasures: { active: [], locked: [] },
+            trash:     { active: [[DEN, null], [NYG, null]], locked: [] } },
+};
+assert.deepEqual(one(g1, locked, ["Marcus"]), [],
+  "a game one player has locked up carries nothing and is dropped");
+
+// ...and a locked player never counts as somebody's head-to-head, since their
+// own total cannot move. The game still shows for the player who does have
+// something riding on it.
+const lockedPlusOne = { ...locked, Haley: solo(DEN, "treasure") };
+const lp = one(g1, lockedPlusOne, ["Marcus", "Haley"]);
+assert.equal(lp.length, 1, "it still matters to Haley");
+assert.deepEqual(lp[0].h2h, [], "Marcus is locked, so there is no rivalry to call");
+assert.deepEqual(lp[0].swings, []);
+assert.equal(lp[0].weight, 1, "only Haley's single point rides on it");
+
+// ---- keyGames: ordering ----
+// A rivalry and a swing both move two points, and both outrank a game that just
+// happens to have a couple of unrelated picks on it.
+const mixed = {
+  Ann: { treasures: { active: [[DEN, null]], locked: [] },
+         trash:     { active: [[NYG, null]], locked: [] } },        // swing on g1
+  Bob: solo(KC, "treasure"),
+  Cid: solo(CLE, "treasure"),                                        // rivalry on KC@CLE
+};
+const kcCle = game(KC, CLE, 0, 0, false);
+const ranked = keyGames([g1, kcCle], ownerOf(mixed, ["Ann", "Bob", "Cid"]));
+assert.equal(ranked.length, 2);
+assert.deepEqual(ranked.map(x => x.weight), [4, 4], "a swing and a rivalry weigh the same");
+assert.ok(ranked.every(x => x.h2h.length || x.swings.length), "both are flagged for a reason");
+assert.equal(keyGames([g1, kcCle], ownerOf(mixed, ["Ann", "Bob", "Cid"]), 1).length, 1,
+  "limit caps the list");
 
 console.log("PASS — weekly summary logic (pickResult, weekLines, teamStrength, weekUpsets, keyGames)");

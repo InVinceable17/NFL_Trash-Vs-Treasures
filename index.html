@@ -235,6 +235,7 @@
   .ws-tag.good { background: rgba(53,190,120,.16); color: #6ee7a8; }
   .ws-tag.bad  { background: rgba(255,126,182,.14); color: var(--pink); }
   .ws-tag.swing { background: rgba(124,92,255,.18); color: #b9a6ff; }
+  .ws-tag.h2h   { background: rgba(56,217,217,.15); color: var(--teal); }
   .ws-empty { font-size: 12px; color: var(--muted); }
   @media (max-width: 520px) {
     .ws-row { grid-template-columns: minmax(52px, auto) auto 1fr; }
@@ -856,22 +857,70 @@ function weekUpsets(games, strengthOf, own, limit = 3) {
   return out.sort((a, b) => b.gap - a.gap).slice(0, limit);
 }
 
-// The week's games that matter most to this league: every pick riding on them,
-// with a game one player holds both sides of weighted higher — those are the
-// 2-points-or-nothing swings.
+// What one game is worth to this league, and why it's worth watching.
+//
+//   stake        — points that actually move for a player on this result.
+//   swing        — one player holding both sides in OPPOSITE categories: the
+//                  result pays them 2 or nothing.
+//   head-to-head — two players whose points move in opposite directions on the
+//                  same result, so exactly one of them scores.
+//
+// A player holding both sides in the SAME category is the one case here that is
+// NOT worth watching: they bank exactly 1 whoever wins. Their stake is 0, they
+// are left out of the head-to-head search, and nothing about the game is
+// flagged for them.
+function gameAngles(game, own) {
+  // Carry the team along: one player can hold both sides, and "Dee 💎, Dee 🗑️"
+  // tells you nothing about which way they need it to go.
+  const picks = [
+    ...(own[game.away] || []).map(o => ({ ...o, team: game.away })),
+    ...(own[game.home] || []).map(o => ({ ...o, team: game.home })),
+  ];
+
+  const held = {};
+  for (const pick of picks) (held[pick.player] = held[pick.player] || []).push(pick);
+
+  const stake = {}, swings = [];
+  for (const [player, mine] of Object.entries(held)) {
+    const bothSides = mine.length === 2;   // a player holds any one team at most once
+    if (bothSides && mine[0].kind === mine[1].kind) {
+      stake[player] = 0;                                   // 1 point either way
+    } else if (bothSides) {
+      stake[player] = 2;                                   // 2 or nothing, on one result
+      swings.push({ player, wants: mine.find(x => x.kind === "treasure").team });
+    } else {
+      stake[player] = mine.length;
+    }
+  }
+
+  // Two players are opposed when the same result pays one and not the other:
+  // either side of the game in the same category (trash vs trash, treasure vs
+  // treasure), or the same team held as one player's treasure and the other's
+  // trash. Treasure on one side plus trash on the other is NOT opposed — those
+  // two rise and fall together.
+  const live = picks.filter(x => stake[x.player] > 0);
+  const seen = new Set(), h2h = [];
+  for (let i = 0; i < live.length; i++) {
+    for (let j = i + 1; j < live.length; j++) {
+      const a = live[i], b = live[j];
+      if (a.player === b.player) continue;
+      if (!(a.team === b.team ? a.kind !== b.kind : a.kind === b.kind)) continue;
+      const pair = [a.player, b.player].sort();
+      const key = pair.join("\u0000");
+      if (seen.has(key)) continue;          // one rivalry, however many picks show it
+      seen.add(key);
+      h2h.push({ players: pair });
+    }
+  }
+
+  const total = Object.values(stake).reduce((a, b) => a + b, 0);
+  return { picks, swings, h2h, weight: total + 2 * h2h.length + 2 * swings.length };
+}
+
+// The games carrying the most for this league, biggest first.
 function keyGames(games, own, limit = 3) {
   return games
-    .map(game => {
-      // Carry the team along: one player can hold both sides, and "Dee 💎, Dee 🗑️"
-      // tells you nothing about which way they need it to go.
-      const picks = [
-        ...(own[game.away] || []).map(o => ({ ...o, team: game.away })),
-        ...(own[game.home] || []).map(o => ({ ...o, team: game.home })),
-      ];
-      const stakes = gameStakes(game, own);
-      const swings = stakes.filter(s => !s.locked).length;
-      return { game, picks, stakes, weight: picks.length + swings * 2 };
-    })
+    .map(game => ({ game, ...gameAngles(game, own) }))
     .filter(x => x.weight > 0)
     .sort((a, b) => b.weight - a.weight || (a.game.date || 0) - (b.game.date || 0))
     .slice(0, limit);
@@ -2080,35 +2129,28 @@ function useTeamRatings(season) {
   return ratings;
 }
 
-// The most recently finished week, for the dashboard recap: the current week
-// once every one of its games is final, otherwise the week before it. Both
-// reads come from caches the Schedule tab already fills.
-function useRecapWeek(season) {
-  const [recap, setRecap] = useState({ week: null, games: null });
+// The week the Schedule tab opens on — the one in progress, else the next to
+// start. Someone opening the app on a Thursday is here for the week about to
+// kick off, not for last week's result, so the dashboard follows the same week
+// the Schedule does. Reads come from caches the Schedule tab already fills.
+function useCurrentWeek(season) {
+  const [state, setState] = useState({ week: null, games: null });
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const allFinal = g => g.length > 0 && g.every(x => x.completed);
-      const anyFinal = g => g.some(x => x.completed);
       try {
         const cal = await fetchSeasonCalendar(season);
         if (cancelled) return;
-        const now = weekForDate(cal);
-        const cur = await fetchWeekGames(season, now).catch(() => []);
-        if (cancelled) return;
-        if (allFinal(cur)) return setRecap({ week: now, games: cur });
-        const first = cal[0] ? cal[0].week : 1;
-        if (now <= first) return setRecap({ week: null, games: null });
-        const before = await fetchWeekGames(season, now - 1).catch(() => []);
-        if (cancelled) return;
-        setRecap(anyFinal(before) ? { week: now - 1, games: before } : { week: null, games: null });
+        const week = weekForDate(cal);
+        const games = await fetchWeekGames(season, week);
+        if (!cancelled) setState({ week, games });
       } catch (e) {
-        if (!cancelled) setRecap({ week: null, games: null });
+        if (!cancelled) setState({ week: null, games: null });
       }
     })();
     return () => { cancelled = true; };
   }, [season]);
-  return recap;
+  return state;
 }
 
 function Schedule({ st, players }) {
@@ -2400,7 +2442,9 @@ function WeekSummary({ week, games, roster, players, records, prev, inset, label
   const preview = decided === 0;
   const ups  = useMemo(() => (preview ? [] : weekUpsets(games, strengthOf, own)),
                        [preview, games, strengthOf, own]);
-  const keys = useMemo(() => (preview ? keyGames(games, own) : []), [preview, games, own]);
+  // Only games still to be decided: mid-week that's what's left to play, before
+  // kickoff it's the whole slate, and once a week is done the section goes away.
+  const keys = useMemo(() => keyGames(games.filter(g => !g.completed), own), [games, own]);
 
   const order = [...players].sort((a, b) =>
     preview ? lines[b].potential - lines[a].potential || a.localeCompare(b)
@@ -2480,7 +2524,7 @@ function WeekSummary({ week, games, roster, players, records, prev, inset, label
 
       {keys.length > 0 && (
         <div className="ws-sec">
-          <div className="ws-sec-h">Games to watch</div>
+          <div className="ws-sec-h">Biggest games</div>
           {keys.map(k => (
             <div className="ws-item" key={k.game.id}>
               <span className="ws-score-line">{teamAbbr(k.game.away)} @ {teamAbbr(k.game.home)}</span>
@@ -2491,14 +2535,14 @@ function WeekSummary({ week, games, roster, players, records, prev, inset, label
                   {o.player} {o.kind === "treasure" ? "💎" : "🗑️"}{teamAbbr(o.team)}
                 </React.Fragment>
               ))}
-              {k.stakes.filter(x => !x.locked).map(x => (
-                <span className="ws-tag swing" key={x.player}>
-                  2 pts or none for {x.player}
+              {k.h2h.map(x => (
+                <span className="ws-tag h2h" key={x.players.join()}>
+                  head-to-head: {x.players[0]} vs {x.players[1]}
                 </span>
               ))}
-              {k.stakes.filter(x => x.locked).map(x => (
+              {k.swings.map(x => (
                 <span className="ws-tag swing" key={x.player}>
-                  1 pt guaranteed for {x.player}
+                  2 pts or none for {x.player}
                 </span>
               ))}
             </div>
@@ -2509,25 +2553,25 @@ function WeekSummary({ week, games, roster, players, records, prev, inset, label
   );
 }
 
-// `recap` is off for the Swap tab's after-this-swap preview, where a panel about
-// a week already played would only distract from the totals it's showing.
+// `recap` is off for the Swap tab's after-this-swap preview, where a week panel
+// would only distract from the totals it's showing.
 function Dashboard({ st, ranking, players, recap: showRecap = true }) {
   const draftLive = st.draft && (st.draft.phase === "draft" || st.draft.phase === "review");
   const season = st.season || ESPN_SEASON;
   const { records, prev } = useTeamRatings(season);
-  const recap = useRecapWeek(season);
-  // Picks move at the swap checkpoints, so a past week has to be scored against
-  // the roster as it stood then, not today's.
-  const recapRoster = useMemo(
-    () => (recap.week ? getReplayRoster(st.roster, recap.week, players) : null),
-    [recap.week, st.roster, players]);
+  const current = useCurrentWeek(season);
+  // Picks move at the swap checkpoints, so a week is scored against the roster
+  // as it stood then, not today's.
+  const weekRoster = useMemo(
+    () => (current.week ? getReplayRoster(st.roster, current.week, players) : null),
+    [current.week, st.roster, players]);
 
   return (
     <div>
       {draftLive && <DraftLive draft={st.draft} players={players} />}
       <Scoreboard st={st} ranking={ranking} players={players} />
-      {showRecap && recap.games && recapRoster && (
-        <WeekSummary week={recap.week} games={recap.games} roster={recapRoster}
+      {showRecap && current.games && weekRoster && (
+        <WeekSummary week={current.week} games={current.games} roster={weekRoster}
                      players={players} records={records} prev={prev} />
       )}
       <div className="dash">
