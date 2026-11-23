@@ -55,7 +55,10 @@ const roster = {
 const own = ownershipMap(roster, ["Vince", "Haley"]);
 assert.deepEqual(own["New York Giants"], [{ player: "Vince", kind: "trash" }]);
 assert.equal(own["Arizona Cardinals"], undefined, "locked rows must not tag games");
-assert.equal(own["Denver Broncos"].length, 2, "a team can be held by two players");
+// Not a league rule — a draft gives each team to exactly one player. This only
+// pins down that ownershipMap returns every holder it was handed rather than
+// collapsing them, so bad data stays visible instead of silently vanishing.
+assert.equal(own["Denver Broncos"].length, 2, "ownershipMap keeps every holder it is given");
 assert.ok(own["Los Angeles Rams"], "swap-marked picks still count as active");
 
 // ---- gameStakes ----

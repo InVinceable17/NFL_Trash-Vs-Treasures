@@ -894,17 +894,21 @@ function gameAngles(game, own) {
   }
 
   // Two players are opposed when the same result pays one and not the other:
-  // either side of the game in the same category (trash vs trash, treasure vs
-  // treasure), or the same team held as one player's treasure and the other's
-  // trash. Treasure on one side plus trash on the other is NOT opposed — those
-  // two rise and fall together.
+  // opposite sides of the game in the same category — trash vs trash, or
+  // treasure vs treasure. Treasure on one side plus trash on the other is NOT
+  // opposed; those two want the same result and rise together.
+  //
+  // The teams must differ. Every team is drafted by exactly one player, so two
+  // picks on one team should never reach here at all — but if bad data ever
+  // produced a pair, they would be two holders of the same result, never
+  // rivals.
   const live = picks.filter(x => stake[x.player] > 0);
   const seen = new Set(), h2h = [];
   for (let i = 0; i < live.length; i++) {
     for (let j = i + 1; j < live.length; j++) {
       const a = live[i], b = live[j];
       if (a.player === b.player) continue;
-      if (!(a.team === b.team ? a.kind !== b.kind : a.kind === b.kind)) continue;
+      if (a.team === b.team || a.kind !== b.kind) continue;
       const pair = [a.player, b.player].sort();
       const key = pair.join("\u0000");
       if (seen.has(key)) continue;          // one rivalry, however many picks show it

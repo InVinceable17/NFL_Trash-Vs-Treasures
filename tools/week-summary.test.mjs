@@ -234,10 +234,16 @@ const treasureVsTreasure = { Ann: solo(DEN, "treasure"), Bob: solo(NYG, "treasur
 assert.deepEqual(one(g1, treasureVsTreasure, ["Ann", "Bob"])[0].h2h, [{ players: ["Ann", "Bob"] }],
   "treasure vs treasure is a head-to-head");
 
-// The same team as one player's treasure and another's trash is also zero-sum.
-const splitOnOne = { Ann: solo(DEN, "treasure"), Bob: solo(DEN, "trash") };
-assert.deepEqual(one(g1, splitOnOne, ["Ann", "Bob"])[0].h2h, [{ players: ["Ann", "Bob"] }],
-  "disagreeing about one team is a head-to-head too");
+// Every team is drafted by exactly one player, so two people never hold the
+// same team and this state cannot arise in a real league. ownershipMap would
+// carry it anyway, so pin down that it is not mistaken for a rivalry: a pair on
+// ONE team is two readings of the same result, not opposite sides of it.
+const sameTeamTwice = { Ann: solo(DEN, "treasure"), Bob: solo(DEN, "trash") };
+assert.deepEqual(one(g1, sameTeamTwice, ["Ann", "Bob"])[0].h2h, [],
+  "a rivalry needs the two players on opposite teams");
+const sameTeamSameKind = { Ann: solo(DEN, "trash"), Bob: solo(DEN, "trash") };
+assert.deepEqual(one(g1, sameTeamSameKind, ["Ann", "Bob"])[0].h2h, [],
+  "...and two holders of one team score together, so they are never rivals");
 
 // Treasure on one side + trash on the other is NOT opposed: both want the same
 // result, so they rise and fall together.
@@ -275,6 +281,10 @@ const mixed = {
   Bob: solo(KC, "treasure"),
   Cid: solo(CLE, "treasure"),                                        // rivalry on KC@CLE
 };
+// No team appears twice across these rosters, as a real draft guarantees.
+const everyTeamOnce = Object.values(mixed)
+  .flatMap(r => [...r.treasures.active, ...r.trash.active].map(([t]) => t));
+assert.equal(new Set(everyTeamOnce).size, everyTeamOnce.length, "fixture must be a legal draft");
 const kcCle = game(KC, CLE, 0, 0, false);
 const ranked = keyGames([g1, kcCle], ownerOf(mixed, ["Ann", "Bob", "Cid"]));
 assert.equal(ranked.length, 2);
