@@ -26,13 +26,15 @@ function constant(name) {
   return `const ${name} = ${m[1]};`;
 }
 
-const { pickResult, weekLines, teamStrength, weekUpsets, keyGames, ownershipMap, UPSET_GAP } =
+const { pickResult, weekLines, teamStrength, weekUpsets, keyGames, ownershipMap, UPSET_GAP,
+        swingLabel, h2hLabel } =
   (0, eval)(`(() => {
     ${constant("PRIOR_GAMES")} ${constant("UPSET_GAP")}
     ${slice("pickResult")} ${slice("weekLines")} ${slice("teamStrength")}
     ${slice("gameStakes")} ${slice("weekUpsets")} ${slice("gameAngles")} ${slice("keyGames")}
-    ${slice("ownershipMap")}
-    return { pickResult, weekLines, teamStrength, weekUpsets, keyGames, ownershipMap, UPSET_GAP };
+    ${slice("swingLabel")} ${slice("h2hLabel")} ${slice("ownershipMap")}
+    return { pickResult, weekLines, teamStrength, weekUpsets, keyGames, ownershipMap, UPSET_GAP,
+             swingLabel, h2hLabel };
   })()`);
 
 // ---- helpers ----
@@ -297,5 +299,33 @@ const manyGames = [g1, game(KC, CLE, 0, 0, false), game(LAR, SF, 0, 0, false),
                    game(CHI, DAL, 0, 0, false)];           // CHI/DAL held by nobody
 assert.equal(keyGames(manyGames, manyOwn).length, 3,
   "all three swing games are listed, not just a top few");
+
+// ---- labels: a decided game must not still be asking ----
+// g1 is final, DEN 24 NYG 10.
+assert.equal(swingLabel(g1, { player: "Ann", wants: DEN }), "Ann took 2",
+  "the side she needed won, so she doubled up");
+assert.equal(swingLabel(g1, { player: "Ann", wants: NYG }), "Ann got none",
+  "the other way round pays nothing");
+assert.equal(swingLabel(game(DEN, NYG, 0, 0, false), { player: "Ann", wants: DEN }),
+  "2 pts or none for Ann", "before kickoff it states the stake");
+assert.equal(swingLabel(game(DEN, NYG, 17, 17), { player: "Ann", wants: DEN }),
+  "Ann got none — tied", "a tie pays nobody");
+
+const rivals = [{ player: "Ann", kind: "trash", team: DEN },
+                { player: "Bob", kind: "trash", team: NYG }];
+const pair = { players: ["Ann", "Bob"] };
+assert.equal(h2hLabel(g1, pair, rivals), "Bob took it from Ann",
+  "NYG lost, so Bob's trash pick cashed");
+assert.equal(h2hLabel(game(DEN, NYG, 0, 0, false), pair, rivals), "head-to-head: Ann vs Bob",
+  "before kickoff it just names the two");
+assert.equal(h2hLabel(game(DEN, NYG, 17, 17), pair, rivals),
+  "head-to-head: Ann vs Bob — tied, no points", "a tie resolves nothing");
+
+// ---- the section must survive a finished week ----
+// Every game final: the callouts stay, which is what keeps the dashboard's
+// expand toggle on screen once the week is done.
+const finishedWeek = keyGames(week, own);
+assert.ok(finishedWeek.length > 0, "a completed week still lists its big games");
+assert.ok(finishedWeek.every(k => k.game.completed));
 
 console.log("PASS — weekly summary logic (pickResult, weekLines, teamStrength, weekUpsets, keyGames)");

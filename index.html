@@ -940,6 +940,29 @@ function gameAngles(game, own) {
   return { picks, swings, h2h, weight: 2 * (swings.length + h2h.length) };
 }
 
+// How an angle reads. Before the result it states what is at stake; afterwards,
+// what actually happened — a decided game should never still be asking.
+function swingLabel(game, swing) {
+  if (!game.completed) return `2 pts or none for ${swing.player}`;
+  if (game.awayScore === game.homeScore) return `${swing.player} got none — tied`;
+  const landed = swing.wants === game.away
+    ? game.awayScore > game.homeScore
+    : game.homeScore > game.awayScore;
+  return landed ? `${swing.player} took 2` : `${swing.player} got none`;
+}
+
+function h2hLabel(game, pair, picks) {
+  const [a, b] = pair.players;
+  if (!game.completed || game.awayScore === game.homeScore) {
+    // A tie pays neither side, so the rivalry simply never resolved.
+    return `head-to-head: ${a} vs ${b}` + (game.completed ? " — tied, no points" : "");
+  }
+  const won = picks.find(o => pair.players.includes(o.player)
+    && pickResult(game, o.team, o.kind) === "hit");
+  return won ? `${won.player} took it from ${won.player === a ? b : a}`
+             : `head-to-head: ${a} vs ${b}`;
+}
+
 // Every game this week that can swing two points, in kickoff order. There is no
 // cap: a week with six of them has six worth watching, and trimming to a top
 // three would hide swings that matter just as much as the ones kept. A week
@@ -2473,9 +2496,10 @@ function WeekSummary({ week, games, roster, players, records, prev, inset, label
   const preview = decided === 0;
   const ups  = useMemo(() => (preview ? [] : weekUpsets(games, strengthOf, own)),
                        [preview, games, strengthOf, own]);
-  // Only games still to be decided: mid-week that's what's left to play, before
-  // kickoff it's the whole slate, and once a week is done the section goes away.
-  const keys = useMemo(() => keyGames(games.filter(g => !g.completed), own), [games, own]);
+  // The whole week, not just what is left of it. Filtering to undecided games
+  // emptied the section on a Monday — exactly when someone wants to see how the
+  // big ones landed — and took the expand toggle with it.
+  const keys = useMemo(() => keyGames(games, own), [games, own]);
 
   const order = [...players].sort((a, b) =>
     preview ? lines[b].potential - lines[a].potential || a.localeCompare(b)
@@ -2573,12 +2597,12 @@ function WeekSummary({ week, games, roster, players, records, prev, inset, label
               ))}
               {k.h2h.map(x => (
                 <span className="ws-tag h2h" key={x.players.join()}>
-                  head-to-head: {x.players[0]} vs {x.players[1]}
+                  {h2hLabel(k.game, x, k.picks)}
                 </span>
               ))}
               {k.swings.map(x => (
                 <span className="ws-tag swing" key={x.player}>
-                  2 pts or none for {x.player}
+                  {swingLabel(k.game, x)}
                 </span>
               ))}
             </div>
