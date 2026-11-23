@@ -206,6 +206,31 @@ const many = weekUpsets(
 assert.equal(many.length, 1, "limit caps the list");
 assert.equal(many[0].winner, CLE, "the 0.8 gap outranks the 0.25 gap");
 
+const solo2 = (team, kind) => ({
+  treasures: { active: kind === "treasure" ? [[team, null]] : [], locked: [] },
+  trash:     { active: kind === "trash"    ? [[team, null]] : [], locked: [] },
+});
+
+// An upset between two teams nobody holds moved no points, so it is not this
+// league's news. (With four players every team is drafted, so this is really a
+// guard for smaller leagues.)
+assert.deepEqual(
+  weekUpsets([game("Las Vegas Raiders", "Pittsburgh Steelers", 30, 3)],
+             t => ({ "Pittsburgh Steelers": 0.9, "Las Vegas Raiders": 0.2 })[t] ?? 0.5, own),
+  [], "a big upset nobody held is not reported");
+
+// The canonical shape: the favourite is one player's treasure, the underdog is
+// another's trash. Both expected a point; the upset takes both away at once.
+const bothExpected = ownershipMap({
+  Ann: solo2(KC, "treasure"),   // favourite
+  Bob: solo2(CLE, "trash"),     // underdog
+}, ["Ann", "Bob"]);
+const twoLost = weekUpsets([game(KC, CLE, 13, 20)],
+  t => ({ [KC]: 0.85, [CLE]: 0.25 })[t] ?? 0.5, bothExpected);
+assert.equal(twoLost.length, 1);
+assert.deepEqual(twoLost[0].helped, [], "neither of them cashed");
+assert.deepEqual(twoLost[0].hurt.sort(), ["Ann", "Bob"], "two expected points lost at once");
+
 // ---- keyGames ----
 const ownerOf = (roster, names) => ownershipMap(roster, names);
 const one = (g, roster, names) => keyGames([g], ownerOf(roster, names));

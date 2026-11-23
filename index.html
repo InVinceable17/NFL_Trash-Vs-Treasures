@@ -856,12 +856,17 @@ function weekUpsets(games, strengthOf, own, limit = 3) {
     const loser  = awayWon ? g.home : g.away;
     const gap = strengthOf(loser) - strengthOf(winner);
     if (gap < UPSET_GAP) continue;
+    // The winner's treasure holders and the loser's trash holders cashed.
+    const helped = [...holders(winner, "treasure"), ...holders(loser, "trash")];
+    const hurt   = [...holders(winner, "trash"),    ...holders(loser, "treasure")];
+    // The classic shape is a favourite held as someone's treasure against an
+    // underdog held as someone else's trash: both expected a point, and the
+    // upset takes both away at once. An upset nobody held is just football.
+    if (!helped.length && !hurt.length) continue;
     out.push({
       game: g, winner, loser, gap,
       margin: Math.abs(g.awayScore - g.homeScore),
-      // The winner's treasure holders and the loser's trash holders cashed.
-      helped: [...holders(winner, "treasure"), ...holders(loser, "trash")],
-      hurt:   [...holders(winner, "trash"), ...holders(loser, "treasure")],
+      helped, hurt,
     });
   }
   return out.sort((a, b) => b.gap - a.gap).slice(0, limit);
@@ -2501,6 +2506,16 @@ function WeekSummary({ week, games, roster, players, records, prev, inset, label
   // big ones landed — and took the expand toggle with it.
   const keys = useMemo(() => keyGames(games, own), [games, own]);
 
+  // Every game named above — the two-point swings and the upsets — with no
+  // repeats, since an upset can also be a callout game. Kickoff order.
+  const cardGames = useMemo(() => {
+    const byId = new Map();
+    for (const g of [...keys.map(k => k.game), ...ups.map(u => u.game)]) {
+      if (!byId.has(g.id)) byId.set(g.id, g);
+    }
+    return [...byId.values()].sort((a, b) => (a.date || 0) - (b.date || 0));
+  }, [keys, ups]);
+
   const order = [...players].sort((a, b) =>
     preview ? lines[b].potential - lines[a].potential || a.localeCompare(b)
             : lines[b].earned - lines[a].earned || lines[b].potential - lines[a].potential
@@ -2607,20 +2622,23 @@ function WeekSummary({ week, games, roster, players, records, prev, inset, label
               ))}
             </div>
           ))}
-          {expandable && (
-            <button className="ws-more" aria-expanded={openCards}
-                    onClick={() => setOpenCards(o => !o)}>
-              {openCards ? "Hide these games ▴" : "Show these games ▾"}
-            </button>
-          )}
-          {expandable && openCards && (
+        </div>
+      )}
+
+      {expandable && cardGames.length > 0 && (
+        <React.Fragment>
+          <button className="ws-more" aria-expanded={openCards}
+                  onClick={() => setOpenCards(o => !o)}>
+            {openCards ? "Hide these games ▴" : "Show these games ▾"}
+          </button>
+          {openCards && (
             <div className="gc-list ws-cards">
-              {keys.map(k => (
-                <GameCard key={k.game.id} game={k.game} own={own} filter="all" records={records} />
+              {cardGames.map(g => (
+                <GameCard key={g.id} game={g} own={own} filter="all" records={records} />
               ))}
             </div>
           )}
-        </div>
+        </React.Fragment>
       )}
     </div>
   );
