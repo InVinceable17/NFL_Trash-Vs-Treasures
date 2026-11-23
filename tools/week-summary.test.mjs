@@ -37,7 +37,8 @@ const { pickResult, weekLines, teamStrength, weekUpsets, keyGames, ownershipMap,
 
 // ---- helpers ----
 const DEN = "Denver Broncos", NYG = "New York Giants", LAR = "Los Angeles Rams",
-      KC  = "Kansas City Chiefs", CLE = "Cleveland Browns", SF = "San Francisco 49ers";
+      KC  = "Kansas City Chiefs", CLE = "Cleveland Browns", SF = "San Francisco 49ers",
+      CHI = "Chicago Bears", DAL = "Dallas Cowboys";
 const game = (away, home, aS, hS, completed = true) =>
   ({ id: `${away}@${home}`, away, home, awayScore: aS, homeScore: hS, completed, date: new Date("2026-09-20T17:00Z") });
 
@@ -62,11 +63,15 @@ const roster = {
   },
   Haley: {
     treasures: { active: [[LAR, null]], locked: [] },
-    trash:     { active: [[DEN, null]], locked: [] },
+    trash:     { active: [[CHI, null]], locked: [] },
   },
 };
-// DEN beat NYG; KC lost to CLE; LAR on bye (no game this week)
-const week = [g1, game(KC, CLE, 13, 20)];
+// No team is held by two players, as a draft guarantees.
+const activeTeams = Object.values(roster)
+  .flatMap(r => [...r.treasures.active, ...r.trash.active].map(([t]) => t));
+assert.equal(new Set(activeTeams).size, activeTeams.length, "fixture must be a legal draft");
+// DEN beat NYG; KC lost to CLE; CHI beat DAL; LAR on bye (no game this week)
+const week = [g1, game(KC, CLE, 13, 20), game(CHI, DAL, 24, 10)];
 const lines = weekLines(week, roster, ["Vince", "Haley"]);
 
 // Vince: DEN treasure hit, NYG trash hit, KC treasure miss, CLE trash miss
@@ -78,7 +83,7 @@ assert.equal(lines.Vince.pending, 0);
 // locked rows are banked history and must not appear in a week's line
 assert.ok(!lines.Vince.picks.some(x => x.team === SF), "locked picks must not score a week");
 
-// Haley: DEN trash miss (DEN won), LAR did not play
+// Haley: CHI trash miss (CHI won), LAR did not play
 assert.equal(lines.Haley.earned, 0);
 assert.equal(lines.Haley.byes, 1, "LAR had no game");
 assert.equal(lines.Haley.potential, 1, "a bye is not a missed point — it never existed");
@@ -207,90 +212,81 @@ const solo = (team, kind) => ({
   trash:     { active: kind === "trash"    ? [[team, null]] : [], locked: [] },
 });
 
-// Vince holds DEN (treasure) and NYG (trash) — both sides of g1, a 2-pt swing —
-// and Haley's DEN trash pick is opposed to both halves of it.
+// A game is called out only when the result can move something by two points.
+// Vince holds both sides of DEN@NYG and both sides of KC@CLE in opposite
+// categories, so each pays him 2 or nothing. CHI@DAL carries one lone pick of
+// Haley's and is not big news.
 const keys = keyGames(week, own);
-assert.equal(keys[0].game.id, g1.id, "the game carrying the most leads");
-assert.deepEqual(keys[0].swings, [{ player: "Vince", wants: DEN }],
-  "opposite categories on both sides is a real swing");
-assert.deepEqual(keys[0].h2h, [{ players: ["Haley", "Vince"] }],
-  "one rivalry, even though two different pick pairings show it");
-// stake 2 (Vince) + 1 (Haley), +2 for the swing, +2 for the head-to-head
-assert.equal(keys[0].weight, 7);
-// games nobody holds are dropped entirely. SF is only a LOCKED row of Vince's,
+assert.equal(keys.length, 2, "only the two games Vince can double up on");
+assert.deepEqual(keys[0].swings, [{ player: "Vince", wants: DEN }]);
+assert.deepEqual(keys[0].h2h, []);
+assert.equal(keys[0].weight, 2, "a 2-or-nothing result is two points of movement");
+assert.ok(!keys.some(k => k.game.id === `${CHI}@${DAL}`),
+  "a game with a single pick on it is not a callout");
+// games nobody holds are dropped too. SF is only a LOCKED row of Vince's,
 // which ownershipMap treats as history — so this game has no live picks on it.
-assert.deepEqual(keyGames([game(SF, "Chicago Bears", 0, 0, false)], own), []);
+assert.deepEqual(keyGames([game(SF, "Seattle Seahawks", 0, 0, false)], own), []);
 
 // ---- keyGames: head-to-heads ----
 // Two trash picks on opposite sides: one of the two teams has to lose, so
-// exactly one of the two players scores.
+// exactly one player scores and they finish two points apart either way.
 const trashVsTrash = { Ann: solo(DEN, "trash"), Bob: solo(NYG, "trash") };
 const tvt = one(g1, trashVsTrash, ["Ann", "Bob"]);
 assert.deepEqual(tvt[0].h2h, [{ players: ["Ann", "Bob"] }], "trash vs trash is a head-to-head");
-assert.equal(tvt[0].weight, 4, "stake 1 each, +2 for the rivalry");
+assert.equal(tvt[0].weight, 2, "the gap between them swings by two");
 
 // Two treasure picks on opposite sides: same deal, one winner.
-const treasureVsTreasure = { Ann: solo(DEN, "treasure"), Bob: solo(NYG, "treasure") };
-assert.deepEqual(one(g1, treasureVsTreasure, ["Ann", "Bob"])[0].h2h, [{ players: ["Ann", "Bob"] }],
-  "treasure vs treasure is a head-to-head");
+assert.deepEqual(one(g1, { Ann: solo(DEN, "treasure"), Bob: solo(NYG, "treasure") },
+                      ["Ann", "Bob"])[0].h2h,
+  [{ players: ["Ann", "Bob"] }], "treasure vs treasure is a head-to-head");
 
-// Every team is drafted by exactly one player, so two people never hold the
-// same team and this state cannot arise in a real league. ownershipMap would
-// carry it anyway, so pin down that it is not mistaken for a rivalry: a pair on
-// ONE team is two readings of the same result, not opposite sides of it.
-const sameTeamTwice = { Ann: solo(DEN, "treasure"), Bob: solo(DEN, "trash") };
-assert.deepEqual(one(g1, sameTeamTwice, ["Ann", "Bob"])[0].h2h, [],
-  "a rivalry needs the two players on opposite teams");
-const sameTeamSameKind = { Ann: solo(DEN, "trash"), Bob: solo(DEN, "trash") };
-assert.deepEqual(one(g1, sameTeamSameKind, ["Ann", "Bob"])[0].h2h, [],
-  "...and two holders of one team score together, so they are never rivals");
+// ---- keyGames: what must NOT be called out ----
+// The reported case. Vince's treasure on one team, Haley's trash on the other:
+// both need the same team to win, so they score together or not at all and the
+// gap between them is unchanged. Nothing swings, so the game is dropped.
+const sameWish = { Vince: solo(DEN, "treasure"), Haley: solo(NYG, "trash") };
+assert.deepEqual(one(g1, sameWish, ["Vince", "Haley"]), [],
+  "a treasure and a trash that both want the same winner is not a matchup");
 
-// Treasure on one side + trash on the other is NOT opposed: both want the same
-// result, so they rise and fall together.
-const aligned = { Ann: solo(DEN, "treasure"), Bob: solo(NYG, "trash") };
-const al = one(g1, aligned, ["Ann", "Bob"]);
-assert.deepEqual(al[0].h2h, [], "treasure on one side and trash on the other move together");
-assert.equal(al[0].weight, 2, "two live picks, no rivalry bonus");
-
-// ---- keyGames: a lock is the opposite of worth watching ----
-// Marcus holds both sides as trash: one has to lose, so he banks exactly 1
-// however it goes. Nothing rides on the result, so the game is not flagged.
-const locked = {
+// One player holding both sides in the SAME category banks exactly 1 whoever
+// wins, so the result moves nothing at all.
+const lockedUp = {
   Marcus: { treasures: { active: [], locked: [] },
             trash:     { active: [[DEN, null], [NYG, null]], locked: [] } },
 };
-assert.deepEqual(one(g1, locked, ["Marcus"]), [],
-  "a game one player has locked up carries nothing and is dropped");
+assert.deepEqual(one(g1, lockedUp, ["Marcus"]), [], "a lock is the opposite of a callout");
 
-// ...and a locked player never counts as somebody's head-to-head, since their
-// own total cannot move. The game still shows for the player who does have
-// something riding on it.
-const lockedPlusOne = { ...locked, Haley: solo(DEN, "treasure") };
-const lp = one(g1, lockedPlusOne, ["Marcus", "Haley"]);
-assert.equal(lp.length, 1, "it still matters to Haley");
-assert.deepEqual(lp[0].h2h, [], "Marcus is locked, so there is no rivalry to call");
-assert.deepEqual(lp[0].swings, []);
-assert.equal(lp[0].weight, 1, "only Haley's single point rides on it");
+// A locked player is never anyone's rival either — their own total cannot move
+// — so a lock plus one outsider still swings nothing.
+assert.deepEqual(one(g1, { ...lockedUp, Haley: solo(DEN, "treasure") }, ["Marcus", "Haley"]), [],
+  "one point riding on it for one player is not a two-point swing");
+
+// A single pick, with nobody on the other side, is just a point in play.
+assert.deepEqual(one(g1, { Ann: solo(DEN, "treasure") }, ["Ann"]), []);
+
+// Two picks on one team cannot happen in a drafted league, and are not opposed
+// anyway: both read the same result. Pinned so bad data is never mistaken for
+// a rivalry.
+assert.deepEqual(one(g1, { Ann: solo(DEN, "treasure"), Bob: solo(DEN, "trash") }, ["Ann", "Bob"]), [],
+  "a rivalry needs the two players on opposite teams");
 
 // ---- keyGames: ordering ----
-// A rivalry and a swing both move two points, and both outrank a game that just
-// happens to have a couple of unrelated picks on it.
+// Under one owner per team a game carries at most one angle, so every callout
+// weighs the same two points and kickoff order decides.
 const mixed = {
   Ann: { treasures: { active: [[DEN, null]], locked: [] },
-         trash:     { active: [[NYG, null]], locked: [] } },        // swing on g1
+         trash:     { active: [[NYG, null]], locked: [] } },      // swing on g1
   Bob: solo(KC, "treasure"),
-  Cid: solo(CLE, "treasure"),                                        // rivalry on KC@CLE
+  Cid: solo(CLE, "treasure"),                                      // rivalry on KC@CLE
 };
-// No team appears twice across these rosters, as a real draft guarantees.
-const everyTeamOnce = Object.values(mixed)
+const mixedTeams = Object.values(mixed)
   .flatMap(r => [...r.treasures.active, ...r.trash.active].map(([t]) => t));
-assert.equal(new Set(everyTeamOnce).size, everyTeamOnce.length, "fixture must be a legal draft");
-const kcCle = game(KC, CLE, 0, 0, false);
-const ranked = keyGames([g1, kcCle], ownerOf(mixed, ["Ann", "Bob", "Cid"]));
-assert.equal(ranked.length, 2);
-assert.deepEqual(ranked.map(x => x.weight), [4, 4], "a swing and a rivalry weigh the same");
-assert.ok(ranked.every(x => x.h2h.length || x.swings.length), "both are flagged for a reason");
-assert.equal(keyGames([g1, kcCle], ownerOf(mixed, ["Ann", "Bob", "Cid"]), 1).length, 1,
-  "limit caps the list");
+assert.equal(new Set(mixedTeams).size, mixedTeams.length, "fixture must be a legal draft");
+const ranked = keyGames([g1, game(KC, CLE, 0, 0, false)], ownerOf(mixed, ["Ann", "Bob", "Cid"]));
+assert.deepEqual(ranked.map(x => x.weight), [2, 2], "a swing and a rivalry weigh the same");
+assert.ok(ranked.every(x => x.h2h.length || x.swings.length),
+  "every callout has a reason attached");
+assert.equal(keyGames([g1, game(KC, CLE, 0, 0, false)],
+                      ownerOf(mixed, ["Ann", "Bob", "Cid"]), 1).length, 1, "limit caps the list");
 
 console.log("PASS — weekly summary logic (pickResult, weekLines, teamStrength, weekUpsets, keyGames)");

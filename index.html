@@ -861,18 +861,26 @@ function weekUpsets(games, strengthOf, own, limit = 3) {
   return out.sort((a, b) => b.gap - a.gap).slice(0, limit);
 }
 
-// What one game is worth to this league, and why it's worth watching.
+// What one game is worth to this league. A game earns a callout only when the
+// result can move something by TWO points — anything smaller is just a point
+// changing hands and happens all weekend:
 //
-//   stake        — points that actually move for a player on this result.
-//   swing        — one player holding both sides in OPPOSITE categories: the
-//                  result pays them 2 or nothing.
-//   head-to-head — two players whose points move in opposite directions on the
-//                  same result, so exactly one of them scores.
+//   swing        — one player holding both sides in OPPOSITE categories. The
+//                  result pays them 2 or nothing: a 2-point move for them.
+//   head-to-head — two players on opposite teams in the SAME category. Exactly
+//                  one scores, so the gap between them finishes 2 points apart
+//                  depending on the result.
 //
-// A player holding both sides in the SAME category is the one case here that is
-// NOT worth watching: they bank exactly 1 whoever wins. Their stake is 0, they
-// are left out of the head-to-head search, and nothing about the game is
-// flagged for them.
+// Two cases that look interesting and are not:
+//
+//   A player holding both sides in the same category banks exactly 1 whoever
+//   wins. Their stake is 0, they are left out of the head-to-head search, and
+//   nothing is flagged for them.
+//
+//   One player's treasure against another player's trash — say Vince on the
+//   Bengals and Haley on the Commanders — is NOT a rivalry. Both of them need
+//   the Bengals to win, so they score together or not at all and the gap
+//   between them is unchanged either way.
 function gameAngles(game, own) {
   // Carry the team along: one player can hold both sides, and "Dee 💎, Dee 🗑️"
   // tells you nothing about which way they need it to go.
@@ -921,11 +929,14 @@ function gameAngles(game, own) {
     }
   }
 
-  const total = Object.values(stake).reduce((a, b) => a + b, 0);
-  return { picks, swings, h2h, weight: total + 2 * h2h.length + 2 * swings.length };
+  // Points of movement riding on the result: 2 per swing, 2 per rivalry. A game
+  // with neither weighs nothing, however many picks sit on it.
+  return { picks, swings, h2h, weight: 2 * (swings.length + h2h.length) };
 }
 
-// The games carrying the most for this league, biggest first.
+// The games carrying a real swing this week, biggest first then by kickoff.
+// Weeks with nothing big in them show nothing rather than padding the list with
+// games that merely have picks on them.
 function keyGames(games, own, limit = 3) {
   return games
     .map(game => ({ game, ...gameAngles(game, own) }))
