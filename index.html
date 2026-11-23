@@ -250,7 +250,10 @@
   .ws-tag.good { background: rgba(53,190,120,.16); color: #6ee7a8; }
   .ws-tag.bad  { background: rgba(255,126,182,.14); color: var(--pink); }
   .ws-tag.swing { background: rgba(124,92,255,.18); color: #b9a6ff; }
-  .ws-tag.h2h   { background: rgba(56,217,217,.15); color: var(--teal); }
+  /* A rivalry takes the colour of the category it is fought in — the same gold
+     and blue the rosters use for treasures and trash. */
+  .ws-tag.h2h-treasure { background: rgba(245,197,66,.15); color: var(--treasure); }
+  .ws-tag.h2h-trash    { background: rgba(79,176,255,.14); color: var(--trash); }
   .ws-tag.upset { background: rgba(255,126,182,.14); color: var(--pink); }
   .ws-empty { font-size: 12px; color: var(--muted); }
   .ws-more { margin-top: 10px; background: transparent; border: 1px solid var(--line);
@@ -952,7 +955,9 @@ function gameAngles(game, own) {
       const key = pair.join("\u0000");
       if (seen.has(key)) continue;          // one rivalry, however many picks show it
       seen.add(key);
-      h2h.push({ players: pair });
+      // Same category on both sides is what makes it a rivalry, so the pair
+      // carries it: a treasure battle and a trash battle read differently.
+      h2h.push({ players: pair, kind: a.kind });
     }
   }
 
@@ -972,16 +977,20 @@ function swingLabel(game, swing) {
   return landed ? `${swing.player} took 2` : `${swing.player} got none`;
 }
 
+const battleName = kind => (kind === "treasure" ? "💎 treasure battle" : "🗑️ trash battle");
+const battleClass = kind => (kind === "treasure" ? "h2h-treasure" : "h2h-trash");
+
 function h2hLabel(game, pair, picks) {
   const [a, b] = pair.players;
+  const battle = battleName(pair.kind);
   if (!game.completed || game.awayScore === game.homeScore) {
     // A tie pays neither side, so the rivalry simply never resolved.
-    return `head-to-head: ${a} vs ${b}` + (game.completed ? " — tied, no points" : "");
+    return `${battle}: ${a} vs ${b}` + (game.completed ? " — tied, no points" : "");
   }
   const won = picks.find(o => pair.players.includes(o.player)
     && pickResult(game, o.team, o.kind) === "hit");
-  return won ? `${won.player} took it from ${won.player === a ? b : a}`
-             : `head-to-head: ${a} vs ${b}`;
+  return won ? `${battle}: ${won.player} beat ${won.player === a ? b : a}`
+             : `${battle}: ${a} vs ${b}`;
 }
 
 // A form rating per team, computed once per lookup. Shared by the summary and
@@ -1002,7 +1011,7 @@ function gameMarks(keys, ups) {
   const marks = new Map();
   const add = (id, mark) => marks.set(id, [...(marks.get(id) || []), mark]);
   for (const k of keys) {
-    for (const x of k.h2h)    add(k.game.id, { cls: "h2h",   text: h2hLabel(k.game, x, k.picks) });
+    for (const x of k.h2h)    add(k.game.id, { cls: battleClass(x.kind), text: h2hLabel(k.game, x, k.picks) });
     for (const x of k.swings) add(k.game.id, { cls: "swing", text: swingLabel(k.game, x) });
   }
   for (const u of ups) {
@@ -2677,7 +2686,7 @@ function WeekSummary({ week, games, roster, players, records, prev, inset, label
                 </React.Fragment>
               ))}
               {k.h2h.map(x => (
-                <span className="ws-tag h2h" key={x.players.join()}>
+                <span className={"ws-tag " + battleClass(x.kind)} key={x.players.join()}>
                   {h2hLabel(k.game, x, k.picks)}
                 </span>
               ))}

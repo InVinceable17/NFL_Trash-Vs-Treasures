@@ -29,7 +29,7 @@ function constant(name) {
 const { pickResult, weekLines, teamStrength, weekUpsets, keyGames, ownershipMap, UPSET_GAP,
         swingLabel, h2hLabel } =
   (0, eval)(`(() => {
-    ${constant("PRIOR_GAMES")} ${constant("UPSET_GAP")}
+    ${constant("PRIOR_GAMES")} ${constant("UPSET_GAP")} ${constant("battleName")}
     ${slice("pickResult")} ${slice("weekLines")} ${slice("teamStrength")}
     ${slice("gameStakes")} ${slice("weekUpsets")} ${slice("gameAngles")} ${slice("keyGames")}
     ${slice("swingLabel")} ${slice("h2hLabel")} ${slice("ownershipMap")}
@@ -259,13 +259,14 @@ assert.deepEqual(keyGames([game(SF, "Seattle Seahawks", 0, 0, false)], own), [])
 // exactly one player scores and they finish two points apart either way.
 const trashVsTrash = { Ann: solo(DEN, "trash"), Bob: solo(NYG, "trash") };
 const tvt = one(g1, trashVsTrash, ["Ann", "Bob"]);
-assert.deepEqual(tvt[0].h2h, [{ players: ["Ann", "Bob"] }], "trash vs trash is a head-to-head");
+assert.deepEqual(tvt[0].h2h, [{ players: ["Ann", "Bob"], kind: "trash" }],
+  "trash vs trash is a trash battle");
 assert.equal(tvt[0].weight, 2, "the gap between them swings by two");
 
 // Two treasure picks on opposite sides: same deal, one winner.
 assert.deepEqual(one(g1, { Ann: solo(DEN, "treasure"), Bob: solo(NYG, "treasure") },
                       ["Ann", "Bob"])[0].h2h,
-  [{ players: ["Ann", "Bob"] }], "treasure vs treasure is a head-to-head");
+  [{ players: ["Ann", "Bob"], kind: "treasure" }], "treasure vs treasure is a treasure battle");
 
 // ---- keyGames: what must NOT be called out ----
 // The reported case. Vince's treasure on one team, Haley's trash on the other:
@@ -338,13 +339,20 @@ assert.equal(swingLabel(game(DEN, NYG, 17, 17), { player: "Ann", wants: DEN }),
 
 const rivals = [{ player: "Ann", kind: "trash", team: DEN },
                 { player: "Bob", kind: "trash", team: NYG }];
-const pair = { players: ["Ann", "Bob"] };
-assert.equal(h2hLabel(g1, pair, rivals), "Bob took it from Ann",
+const pair = { players: ["Ann", "Bob"], kind: "trash" };
+assert.equal(h2hLabel(g1, pair, rivals), "🗑️ trash battle: Bob beat Ann",
   "NYG lost, so Bob's trash pick cashed");
-assert.equal(h2hLabel(game(DEN, NYG, 0, 0, false), pair, rivals), "head-to-head: Ann vs Bob",
+assert.equal(h2hLabel(game(DEN, NYG, 0, 0, false), pair, rivals), "🗑️ trash battle: Ann vs Bob",
   "before kickoff it just names the two");
 assert.equal(h2hLabel(game(DEN, NYG, 17, 17), pair, rivals),
-  "head-to-head: Ann vs Bob — tied, no points", "a tie resolves nothing");
+  "🗑️ trash battle: Ann vs Bob — tied, no points", "a tie resolves nothing");
+
+// A treasure battle is named for its own category.
+const tPair = { players: ["Ann", "Bob"], kind: "treasure" };
+const tRivals = [{ player: "Ann", kind: "treasure", team: DEN },
+                 { player: "Bob", kind: "treasure", team: NYG }];
+assert.equal(h2hLabel(g1, tPair, tRivals), "💎 treasure battle: Ann beat Bob",
+  "DEN won, so Ann's treasure cashed");
 
 // ---- the section must survive a finished week ----
 // Every game final: the callouts stay, which is what keeps the dashboard's
