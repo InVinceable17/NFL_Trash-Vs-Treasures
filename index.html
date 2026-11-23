@@ -213,7 +213,10 @@
   .ws-rows { display: grid; gap: 6px; }
   /* The bar is a read-at-a-glance proportion, not a measurement — cap it so a
      wide screen doesn't stretch it across the whole panel. */
-  .ws-row { display: grid; grid-template-columns: minmax(58px, 120px) auto minmax(70px, 150px) 1fr;
+  /* The bar column hugs its ticks rather than filling a fixed width, so the
+     note that follows reads as belonging to that bar instead of floating in a
+     column of its own. */
+  .ws-row { display: grid; grid-template-columns: minmax(58px, 120px) auto auto 1fr;
             align-items: center; gap: 10px; font-size: 12.5px; }
   .ws-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ws-score { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 14px; }
@@ -222,11 +225,14 @@
      week, so a bye just makes it shorter and needs no footnote, and its ticks
      can be counted: green won, grey lost, accent still to play. */
   .ws-bar { display: flex; gap: 3px; align-items: center; min-width: 0; }
-  .ws-tick { flex: 0 1 15px; min-width: 4px; height: 9px; border-radius: 3px; background: #2b3140; }
+  .ws-tick { flex: 0 0 15px; height: 9px; border-radius: 3px; background: #2b3140; }
   .ws-tick.hit  { background: #2f9e63; }
   .ws-tick.miss { background: #3c4352; }
   .ws-tick.pend { background: var(--accent); opacity: .5; }
   .ws-note { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  /* Same colour as a pending tick, so the count and the bars it refers to read
+     as one thing. Lighter than --accent itself, which is too dark for text. */
+  .ws-pending { color: #b9a6ff; font-weight: 700; }
   .ws-lead { color: var(--treasure); font-weight: 700; }
   .ws-sec { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
   .ws-sec-h { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em;
@@ -247,9 +253,13 @@
   .ws-more:hover { color: var(--text); border-color: var(--accent); }
   /* The panel already has side padding, so the card grid only needs it on top. */
   .ws-cards { padding: 10px 0 0; }
-  @media (max-width: 520px) {
-    .ws-row { grid-template-columns: minmax(52px, auto) auto 1fr; }
+  /* Below this the row cannot hold name, score, eight ticks and the note on one
+     line. The ticks are the whole point of the bar, so rather than crushing
+     them the note drops underneath — still purple, still right by its bar. */
+  @media (max-width: 470px) {
+    .ws-row { grid-template-columns: minmax(46px, auto) auto 1fr; gap: 8px; }
     .ws-note { grid-column: 1 / -1; padding-left: 0; }
+    .ws-tick { flex: 0 0 13px; }
   }
 
   .draft-order-list { display: flex; flex-direction: column; gap: 8px; max-width: 420px; margin: 14px 0 18px; }
@@ -2555,11 +2565,11 @@ function WeekSummary({ week, games, roster, players, records, prev, inset, label
                 ...Array(L.pending).fill("pend"),
               ];
               const notes = [];
-              if (preview) notes.push(`${kindsPlaying(L, "treasure")} 💎 · ${kindsPlaying(L, "trash")} 🗑️`);
-              else if (L.pending) notes.push(`${L.pending} still to play`);
+              if (preview) notes.push({ text: `${kindsPlaying(L, "treasure")} 💎 · ${kindsPlaying(L, "trash")} 🗑️` });
+              else if (L.pending) notes.push({ text: `${L.pending} still to play`, cls: "ws-pending" });
               // Explains a bar shorter than the teams-in-play count: holding
               // both sides of a game in one category banks a point and caps it.
-              if (preview && L.guaranteed) notes.push(`${L.guaranteed} guaranteed`);
+              if (preview && L.guaranteed) notes.push({ text: `${L.guaranteed} guaranteed` });
               const detail = [
                 `${L.earned} won`, `${L.missed} lost`, `${L.pending} to play`,
               ].join(", ") + ` — of ${L.potential} on offer` + (L.byes ? `, ${L.byes} on bye` : "");
@@ -2573,7 +2583,14 @@ function WeekSummary({ week, games, roster, players, records, prev, inset, label
                   <div className="ws-bar" title={detail}>
                     {ticks.map((state, i) => <span key={i} className={"ws-tick " + state} />)}
                   </div>
-                  <span className="ws-note">{notes.join(" · ")}</span>
+                  <span className="ws-note">
+                    {notes.map((n, i) => (
+                      <React.Fragment key={i}>
+                        {i > 0 && " · "}
+                        <span className={n.cls || ""}>{n.text}</span>
+                      </React.Fragment>
+                    ))}
+                  </span>
                 </div>
               );
             })}
