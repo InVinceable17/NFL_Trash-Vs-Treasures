@@ -241,6 +241,12 @@
   .ws-tag.swing { background: rgba(124,92,255,.18); color: #b9a6ff; }
   .ws-tag.h2h   { background: rgba(56,217,217,.15); color: var(--teal); }
   .ws-empty { font-size: 12px; color: var(--muted); }
+  .ws-more { margin-top: 10px; background: transparent; border: 1px solid var(--line);
+             color: var(--muted); font-size: 11.5px; font-weight: 700; padding: 5px 12px;
+             border-radius: 8px; cursor: pointer; }
+  .ws-more:hover { color: var(--text); border-color: var(--accent); }
+  /* The panel already has side padding, so the card grid only needs it on top. */
+  .ws-cards { padding: 10px 0 0; }
   @media (max-width: 520px) {
     .ws-row { grid-template-columns: minmax(52px, auto) auto 1fr; }
     .ws-note { grid-column: 1 / -1; padding-left: 0; }
@@ -2446,7 +2452,12 @@ function Scoreboard({ st, ranking, players }) {
 // One week, read two ways. Once results are in it's a recap — what each player
 // took out of the week, and the results that swung it. Before kickoff it's a
 // preview — what's on offer, and the games carrying the most.
-function WeekSummary({ week, games, roster, players, records, prev, inset, label }) {
+// `expandable` offers a toggle that opens the callout games as full scoreboard
+// cards. The Schedule tab leaves it off — its cards are already right below the
+// panel — so it is really for the dashboard, where they are the only way to see
+// a score without changing tab.
+function WeekSummary({ week, games, roster, players, records, prev, inset, label, expandable }) {
+  const [openCards, setOpenCards] = useState(false);
   const own    = useMemo(() => ownershipMap(roster, players), [roster, players]);
   const lines  = useMemo(() => weekLines(games, roster, players), [games, roster, players]);
   const strengthOf = useMemo(() => {
@@ -2571,6 +2582,19 @@ function WeekSummary({ week, games, roster, players, records, prev, inset, label
               ))}
             </div>
           ))}
+          {expandable && (
+            <button className="ws-more" aria-expanded={openCards}
+                    onClick={() => setOpenCards(o => !o)}>
+              {openCards ? "Hide these games ▴" : "Show these games ▾"}
+            </button>
+          )}
+          {expandable && openCards && (
+            <div className="gc-list ws-cards">
+              {keys.map(k => (
+                <GameCard key={k.game.id} game={k.game} own={own} filter="all" records={records} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -2596,7 +2620,7 @@ function Dashboard({ st, ranking, players, recap: showRecap = true }) {
       <Scoreboard st={st} ranking={ranking} players={players} />
       {showRecap && current.games && weekRoster && (
         <WeekSummary week={current.week} games={current.games} roster={weekRoster}
-                     players={players} records={records} prev={prev} />
+                     players={players} records={records} prev={prev} expandable />
       )}
       <div className="dash">
         {players.map(p => {
